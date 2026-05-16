@@ -1,0 +1,3 @@
+[submodule "workspaces/cmu-genai-v1/repo"]
+	path = workspaces/cmu-genai-v1/repo
+	url = git@github.com:AlexGeControl/10-X23-Generative-AI.git
