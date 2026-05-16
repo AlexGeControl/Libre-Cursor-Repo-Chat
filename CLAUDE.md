@@ -1,5 +1,12 @@
 # Cursor-as-a-Service — Project Bootstrap
 
+> **Status note (2026-05-16):** This is the original kickoff document. The
+> live plan is in [`docs/PLAN.md`](docs/PLAN.md), current architecture in
+> [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Sections §9–§11 below are
+> historical. This project uses a phase-based doc lifecycle — see
+> [`docs/CONTEXT.md`](docs/CONTEXT.md) before editing PLAN.md, PHASE\*.md, or
+> ARCHITECTURE.md.
+
 > **Audience:** This is the kickoff document for a Claude Code session working on
 > this project. Read this first. It is the source of truth for scope, design,
 > and the next actions.
