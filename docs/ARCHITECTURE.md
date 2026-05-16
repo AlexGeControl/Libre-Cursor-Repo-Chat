@@ -35,10 +35,55 @@ process (today). Currently exactly one: `Cursor (CMU GenAI)` →
 | cursor-api-proxy | host node process | 8765 | bound `0.0.0.0`, see below         |
 | cursor agent CLI | host              | —    | spawned per request by the proxy   |
 
-Bring everything up:
+## Operating it
+
+### First-run setup
+
+Run these once per machine. None of them are repeated on daily startup.
 
 ```bash
-# host: start the proxy (kept running)
+# 1. clone this repo and fetch the workspace submodule
+git clone git@github.com:AlexGeControl/Libre-Cursor-Repo-Chat.git
+cd Libre-Cursor-Repo-Chat
+git submodule update --init --recursive
+
+# 2. install the Cursor agent CLI (puts `agent` in ~/.local/bin)
+curl -fsS https://cursor.com/install | bash
+
+# 3. clone cursor-api-proxy as a SIBLING directory (not inside this repo)
+( cd .. && git clone https://github.com/anyrobert/cursor-api-proxy.git )
+
+# 4. apply the in-place patch (see "cursor-api-proxy is patched in
+#    place" below for rationale). The change is one line:
+sed -i 's|if (effectiveChatOnly) args.push("--trust");|args.push("--trust");|' \
+    ../cursor-api-proxy/src/lib/agent-cmd-args.ts
+
+# 5. build the proxy
+( cd ../cursor-api-proxy && npm install && npm run build )
+
+# 6. create .env from the template, then fill in real values
+cp .env.example .env
+# - paste your Cursor API key into CURSOR_API_KEY
+# - regenerate the four LibreChat secrets:
+echo "JWT_SECRET=$(openssl rand -hex 32)"
+echo "JWT_REFRESH_SECRET=$(openssl rand -hex 32)"
+echo "CREDS_KEY=$(openssl rand -hex 32)"
+echo "CREDS_IV=$(openssl rand -hex 16)"
+# paste each output line over the placeholder in .env
+
+# 7. (Linux only) confirm your shell session can talk to Docker
+docker ps   # if "permission denied", you're in the docker group but
+            # the current login hasn't picked it up — see Troubleshooting
+```
+
+### Daily startup
+
+Two long-running processes: the proxy on the host, and the LibreChat
+compose stack. Order doesn't matter, but the proxy must be reachable
+before you start a chat in the browser.
+
+```bash
+# terminal 1 — proxy, kept in foreground for the verbose log
 env PATH="$HOME/.local/bin:$PATH" \
     CURSOR_API_KEY=$(grep CURSOR_API_KEY .env | cut -d= -f2) \
     CURSOR_BRIDGE_HOST=0.0.0.0 \
@@ -49,10 +94,98 @@ env PATH="$HOME/.local/bin:$PATH" \
     CURSOR_BRIDGE_VERBOSE=true \
     node ../cursor-api-proxy/dist/cli.js
 
-# host: bring up LibreChat (in another terminal)
+# terminal 2 — LibreChat (detached)
 docker compose up -d
-# UI: http://localhost:3080
 ```
+
+Open <http://localhost:3080>, register a local account on first run,
+then pick `Cursor (CMU GenAI)` from the model dropdown.
+
+### Health checks
+
+Before chatting, verify each hop:
+
+```bash
+# proxy is up and pointed at the right workspace
+curl -fsS http://127.0.0.1:8765/health | jq .
+
+# proxy can reach Cursor and list models
+curl -fsS http://127.0.0.1:8765/v1/models | jq '.data | length'
+
+# LibreChat is up
+curl -sS -o /dev/null -w "librechat=%{http_code}\n" http://localhost:3080/
+
+# LibreChat container can reach the proxy (the most common failure)
+docker exec librechat-api sh -c \
+  "wget -qO- --timeout=5 http://host.docker.internal:8765/health"
+```
+
+A one-shot chat round-trip (no browser needed) confirms the full path:
+
+```bash
+curl -sS -X POST http://127.0.0.1:8765/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"composer-2-fast","messages":[{"role":"user","content":"In one sentence, what is this repo about?"}]}'
+```
+
+### Stop and restart
+
+```bash
+# stop the proxy: Ctrl-C in its terminal, or:
+pkill -f "cursor-api-proxy/dist/cli.js"
+
+# stop LibreChat
+docker compose down            # containers down, data preserved in .run/
+docker compose down -v         # also drops anonymous volumes (rare)
+
+# wipe local state and start over (destructive!)
+rm -rf .run/                   # mongo data, LibreChat uploads, proxy log
+```
+
+Persistent state lives in `.run/`:
+
+- `.run/mongo-data/` — LibreChat users, conversations, settings.
+- `.run/librechat-uploads/` — file uploads from chats.
+- `.run/librechat-logs/` — LibreChat application logs.
+- `.run/proxy.log` — only present if you've redirected the proxy with `>`.
+
+### Troubleshooting
+
+Failure modes hit during Phase 0, with the actual fix:
+
+**Proxy log says `Workspace Trust Required`.** The patch isn't applied,
+or `npm install` in the proxy checkout reverted `dist/`. Re-run step 4
+of First-run setup, then `npm run build`.
+
+**Proxy log says `Your team administrator has disabled the 'Run
+Everything' option`.** `CURSOR_BRIDGE_FORCE=true` is set somewhere in
+your env. Unset it — `--force` is blocked for this account and you
+don't need it; `--trust` is sufficient.
+
+**Container says `FAILED` against `host.docker.internal:8765/health`,
+but `curl 127.0.0.1:8765/health` works on the host.** The proxy is
+bound to loopback. Restart it with `CURSOR_BRIDGE_HOST=0.0.0.0`.
+
+**`curl http://127.0.0.1:8765/health` returns from the *old* proxy
+after you restart, and `force:` / workspace path still look stale.**
+Two processes own port 8765 — the new one logged `Port 8765 is already
+in use` and exited. `pkill -f cursor-api-proxy/dist/cli.js`, confirm
+with `ss -ltn | grep 8765`, then start again.
+
+**`docker ps` says `permission denied while trying to connect to the
+Docker daemon socket`.** Your user is in the `docker` group
+(`getent group docker`) but the current login shell predates that
+membership. Either log out and back in, or for a single-shell
+workaround run docker via `sg docker -c '<cmd>'`.
+
+**LibreChat returns `{"message":"Illegal request"}` on `/api/agents/chat`.**
+This is the `uaParser` middleware rejecting a non-browser User-Agent.
+Browsers are fine; for `curl` smoke tests, pass
+`-H 'User-Agent: Mozilla/5.0 ...'`.
+
+**LibreChat startup warns `Outdated Config version`.** Cosmetic.
+`librechat.yaml` declares `version: 1.3.5` and upstream is on 1.3.11.
+The config still loads. Bump when convenient.
 
 ## Operational gotchas
 
