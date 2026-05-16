@@ -1,0 +1,17 @@
+version: 1.3.5
+cache: true
+
+endpoints:
+  custom:
+    - name: "Cursor (CMU GenAI)"
+      apiKey: "unused"
+      baseURL: "http://host.docker.internal:8765/v1"
+      models:
+        default:
+          - "composer-2-fast"
+          - "composer-2"
+          - "auto"
+        fetch: false
+      titleConvo: true
+      titleModel: "composer-2-fast"
+      modelDisplayLabel: "cmu-genai-v1"

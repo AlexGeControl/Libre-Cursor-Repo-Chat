@@ -1,0 +1,4 @@
+.env
+.run/
+claude-remote-control.log
+node_modules/
