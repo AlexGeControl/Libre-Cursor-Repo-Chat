@@ -14,47 +14,30 @@ dropdown, backed by a Cursor agent running with the original engineer's
 config and a mounted repo.
 
 The original design and constraints live in [`../CLAUDE.md`](../CLAUDE.md).
-The phases below replace its §9 bootstrap task list.
 
 ## Phases
 
 ### Phase 0 — CLI-first plumbing exploration (✓ done, 2026-05-16)
 
-Validate the LibreChat ↔ adapter ↔ Cursor pipeline end-to-end with the
-**Cursor CLI** via `anyrobert/cursor-api-proxy`, using a personal CMU
-learning repo. No custom adapter code. Goal: de-risk before committing
-to SDK-based adapter work.
+Validated LibreChat ↔ adapter ↔ Cursor end-to-end via
+`anyrobert/cursor-api-proxy` + Cursor CLI, using a personal CMU
+learning repo. De-risked before committing to SDK work. Full story:
+[`PHASE0.md`](PHASE0.md).
 
-**Outcome:** plumbing works. Browser → LibreChat → proxy → `agent` CLI
-→ workspace, with SSE streaming and multi-turn (replayed history) all
-confirmed. Several proxy/LibreChat gotchas surfaced.
+### Phase 1 — Adapter MVP, feature-complete workspace-as-a-service (✓ done, 2026-05-17)
 
-→ Full story in [`PHASE0.md`](PHASE0.md).
+Replaced the borrowed proxy with our own Fastify + `@cursor/sdk@1.0.7`
+adapter, Dockerized. Owns real `Agent.resume` continuity (SQLite-backed
+convKey → agentId mapping), serves multiple workspaces from one
+process, validates rules + skills + MCP end-to-end through a TDD eval
+suite with a bare-workspace negative control. Full story:
+[`PHASE1.md`](PHASE1.md).
 
-### Phase 1 — SDK-based adapter, MVP (planned)
+### Phase 2 — TBD (planned)
 
-Replace the borrowed proxy with our own thin adapter built on
-`@cursor/sdk`. Goal: own the conv-state mapping (so continuity is real
-`Agent.resume`, not just LibreChat replaying history), expose multiple
-workspaces from a single process, and keep the OpenAI-compatible
-surface so LibreChat config stays trivial.
-
-Definition of done is roughly CLAUDE.md §5's MVP definition but
-de-NVIDIA'd for the exploration repo. Open questions and inherited
-decisions live in the phase doc.
-
-→ Draft scaffold in [`PHASE1.md`](PHASE1.md).
-
-### Phase 2+ — not yet scoped
-
-Likely candidates, in no particular order:
-
-- Self-hosted Cursor runtime (data-residency story for NVIDIA HW IP).
-- Per-skill / per-user API keys for cost attribution.
-- Dynamic workspace registration (engineer ships a manifest, the
-  system picks it up without a config edit + restart).
-- Real auth (SSO).
-- Worker pool / concurrent agents.
-
-These are placeholders. They become real phases when there's reason to
-start one.
+Phase 2 is not yet scoped. The deferred backlog from Phase 1 (TDD
+backfill for adapter modules, workspace data isolation, per-user API
+keys, self-hosted Cursor runtime, SSO, tier-2 context-management
+evals, manifest enhancements) is enumerated in
+[`PHASE2.md`](PHASE2.md). A real Phase 2 starts when there's reason
+to take one of those items — or a coherent cluster — on as a phase.

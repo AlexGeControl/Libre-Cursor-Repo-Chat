@@ -3,15 +3,34 @@ cache: true
 
 endpoints:
   custom:
-    - name: "Cursor (CMU GenAI)"
+    # The Cursor adapter runs as a sibling compose service (`adapter`),
+    # so DNS-by-name resolves intra-network without host.docker.internal.
+    # `apiKey` is a placeholder the adapter ignores — workspace-level
+    # access is controlled by the manifest registry, not per-request
+    # bearer tokens.
+    #
+    # The `headers:` block forwards LibreChat's body fields as request
+    # headers so the adapter can map LibreChat conversationId → Cursor
+    # agentId for `Agent.resume`. Placeholder syntax is LibreChat's
+    # built-in body-field substitution (see
+    # `packages/api/src/utils/env.ts` upstream). The allowed body
+    # fields are `conversationId`, `messageId`, `parentMessageId`.
+    #
+    # `models.fetch: true` makes LibreChat query the adapter's
+    # `/v1/models` so adding a workspace (drop a manifest + restart
+    # the adapter container) doesn't require editing this file.
+    - name: "Cursor Workspaces"
       apiKey: "unused"
-      baseURL: "http://host.docker.internal:8765/v1"
+      baseURL: "http://adapter:8080/v1"
+      headers:
+        X-LibreChat-Conversation-Id: "{{LIBRECHAT_BODY_CONVERSATIONID}}"
+        X-LibreChat-Message-Id: "{{LIBRECHAT_BODY_MESSAGEID}}"
+        X-LibreChat-Parent-Message-Id: "{{LIBRECHAT_BODY_PARENTMESSAGEID}}"
       models:
         default:
-          - "composer-2-fast"
-          - "composer-2"
-          - "auto"
-        fetch: false
+          - "cmu-genai-v1"
+          - "cmu-llm-systems-v1"
+          - "cursor-cookbook-v1"
+        fetch: true
       titleConvo: true
-      titleModel: "composer-2-fast"
-      modelDisplayLabel: "cmu-genai-v1"
+      titleModel: "cmu-genai-v1"

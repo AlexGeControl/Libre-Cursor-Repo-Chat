@@ -32,3 +32,24 @@ services:
     command: mongod --noauth
     volumes:
       - ./.run/mongo-data:/data/db
+
+  adapter:
+    build: ./adapter
+    container_name: cursor-adapter
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - ADAPTER_HOST=0.0.0.0
+      - ADAPTER_PORT=8080
+      - WORKSPACES_DIR=/app/workspaces
+      - ADAPTER_STATE_DIR=/app/.run/adapter
+    volumes:
+      # Workspaces are read-only — the agent reads .cursor/ configs and
+      # repo contents but is never authorized to mutate them.
+      - ./workspaces:/app/workspaces:ro
+      # Adapter state (SQLite conv-mapping) persists across restarts.
+      - ./.run/adapter:/app/.run/adapter

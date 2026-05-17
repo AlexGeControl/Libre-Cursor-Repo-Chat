@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc -p tsconfig.json --noEmit)",
+      "Bash(npm test)",
+      "Bash(awk *)",
+      "Bash(npm view *)"
+    ]
+  }
+}

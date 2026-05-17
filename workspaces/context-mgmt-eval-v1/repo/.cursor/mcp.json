@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "oreilly": {
+      "url": "https://api.oreilly.com/api/content-discovery/v1/mcp/",
+      "headers": {
+        "Authorization": "Bearer ${OREILLY_MCP_TOKEN}"
+      }
+    }
+  }
+}

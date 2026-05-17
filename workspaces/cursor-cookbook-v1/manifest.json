@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "id": "cursor-cookbook-v1",
+  "display_name": "Cursor (Cookbook)",
+  "description": "Cursor SDK cookbook — quickstart, app-builder, coding-agent-cli, agent-kanban, dag-task-runner examples.",
+  "owner": "yaoge",
+  "workspace_dir": "./repo",
+  "cursor_model": "gpt-5.5-extra-high-fast",
+  "mode": "ask"
+}

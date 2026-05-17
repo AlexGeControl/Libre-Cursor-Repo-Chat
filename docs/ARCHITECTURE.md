@@ -1,8 +1,8 @@
 # Architecture — current state
 
-> Manual for the system as it runs today. For why it's shaped this way,
-> see [`PLAN.md`](PLAN.md) and the relevant `PHASE[N].md`. For how this
-> doc is maintained, see [`CONTEXT.md`](CONTEXT.md).
+> Manual for the system as it runs today. For why it's shaped this
+> way, see [`PLAN.md`](PLAN.md) and the relevant `PHASE[N].md`. For
+> how this doc is maintained, see [`CONTEXT.md`](CONTEXT.md).
 
 ## Pipeline
 
@@ -11,29 +11,112 @@ Browser
   │
   ▼  HTTP localhost:3080
 LibreChat API  (docker container "librechat-api")
-   │
-   ▼  POST /v1/chat/completions   baseURL=http://host.docker.internal:8765/v1
-cursor-api-proxy  (host process on :8765, bound 0.0.0.0)
-   │  spawns: agent --print --trust --mode ask --workspace <abs> --model <id>
-   ▼
-Cursor agent CLI  (host)
-   │  cwd = workspaces/cmu-genai-v1/repo
-   ▼
+  │
+  ▼  POST /v1/chat/completions   baseURL=http://adapter:8080/v1
+  │  + headers: X-LibreChat-Conversation-Id, X-LibreChat-Message-Id,
+  │             X-LibreChat-Parent-Message-Id
+  │
+Cursor adapter  (docker container "cursor-adapter", Fastify + @cursor/sdk@1.0.7)
+  │  ├─ /v1/models      — driven by workspaces/*/manifest.json
+  │  └─ /v1/chat/completions:
+  │        SQLite lookup: convKey → cursorAgentId
+  │        ├─ hit  → Agent.resume(agentId)  + agent.send(lastMsg)
+  │        └─ miss → Agent.create()         + agent.send(rehydration|lastMsg)
+  │
+  ▼  @cursor/sdk@1.0.7 (pinned exact)
 Cursor API
 ```
 
-One LibreChat "custom endpoint" entry = one workspace = one proxy
-process (today). Currently exactly one: `Cursor (CMU GenAI)` →
-`workspaces/cmu-genai-v1/repo`.
+One LibreChat custom-endpoint entry = one adapter service. Today
+that's `Cursor Workspaces` → `http://adapter:8080/v1`. The adapter
+itself serves multiple workspaces ("skills") from a single process,
+each discovered from `workspaces/<id>/manifest.json`.
 
 ## Services
 
-| Service       | Where               | Port | Notes                              |
-|---------------|---------------------|------|------------------------------------|
-| LibreChat API | docker container    | 3080 | `librechat-api`                    |
-| MongoDB       | docker container    | —    | `librechat-mongo`, internal only   |
-| cursor-api-proxy | host node process | 8765 | bound `0.0.0.0`, see below         |
-| cursor agent CLI | host              | —    | spawned per request by the proxy   |
+| Service          | Where               | Port | Notes                                |
+|------------------|---------------------|------|--------------------------------------|
+| LibreChat API    | docker `librechat-api` | 3080 | The browser-facing UI                |
+| Cursor adapter   | docker `cursor-adapter` | 8080 | OpenAI-compatible Cursor bridge      |
+| MongoDB          | docker `librechat-mongo` | —    | LibreChat state; internal only       |
+
+Defined in [`../docker-compose.yml`](../docker-compose.yml). All three
+services live on the default compose network and reach each other by
+service name (`adapter`, `mongodb`, etc.).
+
+## Adapter surface
+
+### `GET /health`
+
+```json
+{ "ok": true, "skills": 5, "workspacesDir": "/app/workspaces",
+  "stateDir": "/app/.run/adapter" }
+```
+
+### `GET /v1/models`
+
+OpenAI-shape list of skills, one per `workspaces/*/manifest.json`.
+LibreChat auto-fetches this when `models.fetch: true` in
+`librechat.yaml`, so adding a workspace doesn't require config edits
+on the LibreChat side.
+
+### `POST /v1/chat/completions`
+
+OpenAI-compatible chat completions, both streaming (`stream: true`,
+SSE) and non-streaming. Dispatch flow on every request:
+
+1. Derive `convKey = ${body.user}:${X-LibreChat-Conversation-Id}`.
+2. Look up convKey → cursorAgentId in SQLite.
+3. If found and skill matches:
+   - `Agent.resume(agentId)` → `agent.send(lastUserMessage)`.
+   - On `UnknownAgentError` (resume- OR send-time): delete mapping,
+     fall through to create.
+4. Otherwise: `Agent.create()` → if `messages.length > 1`, send a
+   rehydration prompt built from the LibreChat transcript; else send
+   the latest message bare.
+5. On success: `convStore.put` (create) or `convStore.touch` (resume).
+
+Other errors (auth, network) propagate as `500` — never silently
+masquerade as "agent expired."
+
+## Workspace manifest schema
+
+Each workspace lives at `workspaces/<id>/` with a `manifest.json`:
+
+```json
+{
+  "schema_version": 1,
+  "id": "cmu-genai-v1",
+  "display_name": "Cursor (CMU GenAI)",
+  "description": "...",
+  "owner": "yaoge",
+  "workspace_dir": "./repo",
+  "cursor_model": "gpt-5.5-extra-high-fast",
+  "mode": "ask"
+}
+```
+
+`workspace_dir` is relative to the manifest file. The agent's cwd
+when serving requests for this skill is the resolved path. The
+manifest's directory may also contain `.cursor/rules/`,
+`.cursor/skills/`, and `.cursor/mcp.json` — see "Workspace
+configuration" below.
+
+## Workspace configuration (`.cursor/`)
+
+Per CLAUDE.md §2, a deployed workspace can bring three flavors of
+user-configurable context:
+
+| Surface | Loaded via | Owner config |
+|---|---|---|
+| Rules — `<repo>/.cursor/rules/*.mdc` | `local.settingSources: ["project"]` (passed by the adapter) | Frontmatter `description`, `globs`, `alwaysApply` |
+| Skills — `<repo>/.cursor/skills/<name>/SKILL.md` | same | Frontmatter `name`, `description` |
+| MCP — `<repo>/.cursor/mcp.json` | **adapter loads explicitly** (see "Operational gotchas") | `mcpServers` map; HTTP or stdio servers |
+
+The adapter exposes these to the Cursor agent on every `Agent.create`
+or `Agent.resume`. `${ENV_VAR}` placeholders in `mcp.json` headers
+are expanded against `process.env` before handoff — that's how the
+O'Reilly MCP server gets its token without committing it.
 
 ## Operating it
 
@@ -42,104 +125,82 @@ process (today). Currently exactly one: `Cursor (CMU GenAI)` →
 Run these once per machine. None of them are repeated on daily startup.
 
 ```bash
-# 1. clone this repo and fetch the workspace submodule
+# 1. clone this repo and fetch workspace submodules
 git clone git@github.com:AlexGeControl/Libre-Cursor-Repo-Chat.git
 cd Libre-Cursor-Repo-Chat
 git submodule update --init --recursive
 
-# 2. install the Cursor agent CLI (puts `agent` in ~/.local/bin)
-curl -fsS https://cursor.com/install | bash
-
-# 3. clone cursor-api-proxy as a SIBLING directory (not inside this repo)
-( cd .. && git clone https://github.com/anyrobert/cursor-api-proxy.git )
-
-# 4. apply the in-place patch (see "cursor-api-proxy is patched in
-#    place" below for rationale). The change is one line:
-sed -i 's|if (effectiveChatOnly) args.push("--trust");|args.push("--trust");|' \
-    ../cursor-api-proxy/src/lib/agent-cmd-args.ts
-
-# 5. build the proxy
-( cd ../cursor-api-proxy && npm install && npm run build )
-
-# 6. create .env from the template, then fill in real values
+# 2. create .env from the template, then fill in real values
 cp .env.example .env
-# - paste your Cursor API key into CURSOR_API_KEY
-# - regenerate the four LibreChat secrets:
+#    - paste your Cursor API key into CURSOR_API_KEY
+#    - paste OREILLY_MCP_TOKEN if you want the MCP eval to run
+#    - regenerate the four LibreChat secrets:
 echo "JWT_SECRET=$(openssl rand -hex 32)"
 echo "JWT_REFRESH_SECRET=$(openssl rand -hex 32)"
 echo "CREDS_KEY=$(openssl rand -hex 32)"
 echo "CREDS_IV=$(openssl rand -hex 16)"
 # paste each output line over the placeholder in .env
 
-# 7. (Linux only) confirm your shell session can talk to Docker
+# 3. (Linux only) confirm your shell session can talk to Docker
 docker ps   # if "permission denied", you're in the docker group but
             # the current login hasn't picked it up — see Troubleshooting
 ```
 
 ### Daily startup
 
-Two long-running processes: the proxy on the host, and the LibreChat
-compose stack. Order doesn't matter, but the proxy must be reachable
-before you start a chat in the browser.
-
 ```bash
-# terminal 1 — proxy, kept in foreground for the verbose log
-env PATH="$HOME/.local/bin:$PATH" \
-    CURSOR_API_KEY=$(grep CURSOR_API_KEY .env | cut -d= -f2) \
-    CURSOR_BRIDGE_HOST=0.0.0.0 \
-    CURSOR_BRIDGE_PORT=8765 \
-    CURSOR_BRIDGE_WORKSPACE=$PWD/workspaces/cmu-genai-v1/repo \
-    CURSOR_BRIDGE_CHAT_ONLY_WORKSPACE=false \
-    CURSOR_BRIDGE_MODE=ask \
-    CURSOR_BRIDGE_VERBOSE=true \
-    node ../cursor-api-proxy/dist/cli.js
-
-# terminal 2 — LibreChat (detached)
 docker compose up -d
 ```
 
+Three containers come up: `librechat-api` (UI on `:3080`),
+`librechat-mongo` (internal), `cursor-adapter` (`:8080`).
+
 Open <http://localhost:3080>, register a local account on first run,
-then pick `Cursor (CMU GenAI)` from the model dropdown.
+then pick `Cursor Workspaces` from the model dropdown and choose any
+listed workspace (`cmu-genai-v1`, `cmu-llm-systems-v1`,
+`cursor-cookbook-v1`, …).
 
 ### Health checks
 
-Before chatting, verify each hop:
-
 ```bash
-# proxy is up and pointed at the right workspace
-curl -fsS http://127.0.0.1:8765/health | jq .
+# adapter is up and pointed at the workspaces dir
+curl -fsS http://127.0.0.1:8080/health | jq .
 
-# proxy can reach Cursor and list models
-curl -fsS http://127.0.0.1:8765/v1/models | jq '.data | length'
+# adapter lists workspaces
+curl -fsS http://127.0.0.1:8080/v1/models | jq '.data[].id'
 
 # LibreChat is up
 curl -sS -o /dev/null -w "librechat=%{http_code}\n" http://localhost:3080/
 
-# LibreChat container can reach the proxy (the most common failure)
-docker exec librechat-api sh -c \
-  "wget -qO- --timeout=5 http://host.docker.internal:8765/health"
+# LibreChat container can reach the adapter via compose DNS
+docker exec librechat-api wget -qO- --timeout=5 http://adapter:8080/health
 ```
 
-A one-shot chat round-trip (no browser needed) confirms the full path:
+A one-shot chat round-trip against the adapter (no browser needed):
 
 ```bash
-curl -sS -X POST http://127.0.0.1:8765/v1/chat/completions \
+curl -sS -X POST http://127.0.0.1:8080/v1/chat/completions \
   -H 'Content-Type: application/json' \
-  -d '{"model":"composer-2-fast","messages":[{"role":"user","content":"In one sentence, what is this repo about?"}]}'
+  -d '{"model":"cmu-genai-v1","stream":false,
+       "messages":[{"role":"user","content":"What is this repo about?"}]}'
 ```
 
 ### Stop and restart
 
 ```bash
-# stop the proxy: Ctrl-C in its terminal, or:
-pkill -f "cursor-api-proxy/dist/cli.js"
-
-# stop LibreChat
 docker compose down            # containers down, data preserved in .run/
 docker compose down -v         # also drops anonymous volumes (rare)
+docker compose restart adapter # rebuild not needed for adapter source changes —
+                               # they're inside the image. Rebuild after deps
+                               # or workspace manifest layout changes.
+```
 
-# wipe local state and start over (destructive!)
-rm -rf .run/                   # mongo data, LibreChat uploads, proxy log
+Rebuild the adapter image (after `package.json` edits, Dockerfile
+edits, or source changes that need to ship inside the container):
+
+```bash
+docker compose build adapter
+docker compose up -d adapter
 ```
 
 Persistent state lives in `.run/`:
@@ -147,137 +208,205 @@ Persistent state lives in `.run/`:
 - `.run/mongo-data/` — LibreChat users, conversations, settings.
 - `.run/librechat-uploads/` — file uploads from chats.
 - `.run/librechat-logs/` — LibreChat application logs.
-- `.run/proxy.log` — only present if you've redirected the proxy with `>`.
+- `.run/adapter/conv-state.sqlite` — convKey → cursorAgentId mapping.
+
+### Adding a workspace
+
+```bash
+# 1. add the repo (as a submodule or any other content)
+mkdir -p workspaces/my-skill-v1/repo
+# (populate workspaces/my-skill-v1/repo with content + optionally
+#  .cursor/rules/, .cursor/skills/, .cursor/mcp.json)
+
+# 2. write the manifest
+cat > workspaces/my-skill-v1/manifest.json <<'JSON'
+{
+  "schema_version": 1,
+  "id": "my-skill-v1",
+  "display_name": "Cursor (My Skill)",
+  "description": "...",
+  "owner": "you",
+  "workspace_dir": "./repo",
+  "cursor_model": "gpt-5.5-extra-high-fast",
+  "mode": "ask"
+}
+JSON
+
+# 3. restart the adapter container so it rescans workspaces/
+docker compose restart adapter
+
+# 4. LibreChat picks it up automatically (models.fetch: true)
+```
 
 ### Troubleshooting
 
-Failure modes hit during Phase 0, with the actual fix:
+**Adapter logs say `Ripgrep path not configured`.** Inside the
+container this should never happen — the Dockerfile installs
+`ripgrep` via apt. If you're running host-mode dev (`cd adapter && npm
+start`), the SDK requires `rg` on PATH. The adapter auto-detects
+the bundled `rg` from `~/.local/share/cursor-agent/versions/<v>/rg`
+if cursor-agent CLI is installed.
 
-**Proxy log says `Workspace Trust Required`.** The patch isn't applied,
-or `npm install` in the proxy checkout reverted `dist/`. Re-run step 4
-of First-run setup, then `npm run build`.
+**Adapter returns `404 unknown model: …`.** The model id in your
+request doesn't match any `workspaces/*/manifest.json` → `id`. List
+what the adapter sees: `curl -fsS http://127.0.0.1:8080/v1/models`.
+Restart the adapter container if you just added a manifest.
 
-**Proxy log says `Your team administrator has disabled the 'Run
-Everything' option`.** `CURSOR_BRIDGE_FORCE=true` is set somewhere in
-your env. Unset it — `--force` is blocked for this account and you
-don't need it; `--trust` is sufficient.
-
-**Container says `FAILED` against `host.docker.internal:8765/health`,
-but `curl 127.0.0.1:8765/health` works on the host.** The proxy is
-bound to loopback. Restart it with `CURSOR_BRIDGE_HOST=0.0.0.0`.
-
-**`curl http://127.0.0.1:8765/health` returns from the *old* proxy
-after you restart, and `force:` / workspace path still look stale.**
-Two processes own port 8765 — the new one logged `Port 8765 is already
-in use` and exited. `pkill -f cursor-api-proxy/dist/cli.js`, confirm
-with `ss -ltn | grep 8765`, then start again.
-
-**`docker ps` says `permission denied while trying to connect to the
-Docker daemon socket`.** Your user is in the `docker` group
-(`getent group docker`) but the current login shell predates that
-membership. Either log out and back in, or for a single-shell
-workaround run docker via `sg docker -c '<cmd>'`.
+**Adapter returns `500 Agent agent-... not found`.** A Cursor-side
+agent was reaped while the SQLite mapping pointed at it. The adapter
+catches this on retry — try the same request again, you'll hit the
+create-path-with-rehydration. If it persists, inspect
+`.run/adapter/conv-state.sqlite` for stale rows.
 
 **LibreChat returns `{"message":"Illegal request"}` on `/api/agents/chat`.**
 This is the `uaParser` middleware rejecting a non-browser User-Agent.
-Browsers are fine; for `curl` smoke tests, pass
-`-H 'User-Agent: Mozilla/5.0 ...'`.
+Browsers are fine; for `curl` smoke tests, pass a Chrome-shaped UA.
 
 **LibreChat startup warns `Outdated Config version`.** Cosmetic.
-`librechat.yaml` declares `version: 1.3.5` and upstream is on 1.3.11.
-The config still loads. Bump when convenient.
+`librechat.yaml` declares `version: 1.3.5` and upstream is on a
+later schema. The config still loads. Bump when convenient.
+
+**`docker ps` says `permission denied while trying to connect to the
+Docker daemon socket`.** Your user is in the `docker` group
+(`getent group docker`) but the current login predates that
+membership. Log out and back in, or run docker via `sg docker -c
+'<cmd>'`.
 
 ## Operational gotchas
 
-These are required configurations. Removing any of them breaks the
+Things that are required configurations. Removing any breaks the
 system in non-obvious ways. The rationale for each lives in
-[`PHASE0.md`](PHASE0.md).
+[`PHASE1.md`](PHASE1.md).
 
-### `cursor-api-proxy` is patched in place
+### `@cursor/sdk` pinned to exact `1.0.7`
 
-`cursor-api-proxy/src/lib/agent-cmd-args.ts` is patched to **always**
-pass `--trust` to the agent CLI, not only in chat-only mode. The
-upstream proxy assumes `--force` will cover real-workspace mode, but
-`--force` is admin-disabled on this Cursor account. Re-apply this patch
-after any `npm install` in the proxy directory.
+`package.json` declares `"@cursor/sdk": "1.0.7"` (no caret, no
+range). Caret-pinning silently resolves to 1.0.13 which hits
+`feature_unavailable` on `GET /v1/models` from inside `Agent.create`.
+CI must use `npm ci` against a lockfile that resolves to 1.0.7
+exactly; never run `npm update` against this dep without a re-spike.
 
-The change is one line — replace `if (effectiveChatOnly) args.push("--trust");`
-with `args.push("--trust");`.
+### `local.settingSources: ["project"]`
 
-### `CURSOR_BRIDGE_HOST=0.0.0.0` is required
+The adapter passes this on every `Agent.create` / `Agent.resume`.
+Without it the SDK boots a bare agent that doesn't load
+`.cursor/rules/` or `.cursor/skills/` from the workspace —
+**rules and skills silently no-op**.
 
-The default `127.0.0.1` is unreachable from the LibreChat container via
-`host.docker.internal`. Bind `0.0.0.0` and rely on host firewall rules
-if you don't want the proxy on your LAN.
+### `.cursor/mcp.json` is loaded by the adapter explicitly
 
-### `CURSOR_BRIDGE_CHAT_ONLY_WORKSPACE=false` is required
+The `settingSources` toggle does NOT cover `mcp.json`. The adapter
+reads the file, expands `${ENV_VAR}` placeholders against
+`process.env`, and passes the result via the `mcpServers` SDK
+option. Implementation in
+[`../adapter/src/cursor/cursor-adapter.ts`](../adapter/src/cursor/cursor-adapter.ts)
+→ `loadMcpServers`.
 
-Otherwise the agent runs in an empty tempdir and can't see the
-workspace. With this set to `false`, the proxy passes
-`--workspace <abs path>` to the CLI.
+### `ripgrep` must be available
 
-### `CURSOR_BRIDGE_MODE=ask`
+The SDK requires `rg` on PATH. The Docker image installs it via apt;
+host-mode dev relies on the auto-detection helper in
+[`../adapter/src/cursor/runtime.ts`](../adapter/src/cursor/runtime.ts).
 
-Read-only. The CLI can grep/index the repo but cannot edit it. If a
-future phase wants the agent to *write* into a workspace, this becomes
-`agent` mode, and the workspace should be a scratch dir, not the source
-repo.
+### LibreChat body-field headers
 
-### Cursor CLI authentication
+The custom-endpoint config in `librechat.yaml` includes:
 
-The proxy spawns `agent` with `CURSOR_API_KEY` from the env. The key
-lives in `.env` (gitignored). The same key is used for all sessions —
-no per-user attribution yet.
+```yaml
+headers:
+  X-LibreChat-Conversation-Id: "{{LIBRECHAT_BODY_CONVERSATIONID}}"
+  X-LibreChat-Message-Id:      "{{LIBRECHAT_BODY_MESSAGEID}}"
+  X-LibreChat-Parent-Message-Id: "{{LIBRECHAT_BODY_PARENTMESSAGEID}}"
+```
 
-### LibreChat secrets
+The `{{LIBRECHAT_BODY_<UPPERCASE>}}` placeholders are LibreChat's
+built-in substitution. Without these, the adapter has no stable
+conversationId to key its SQLite mapping on, and `Agent.resume`
+becomes guesswork. See PHASE1.md "Slice 2c — LibreChat probe" for
+the discovery story.
 
-`JWT_SECRET`, `JWT_REFRESH_SECRET`, `CREDS_KEY`, `CREDS_IV` in `.env`
-are this deployment's secrets. `.env.example` documents the shape with
-placeholders; regenerate real values for any new deployment.
+### Idle-agent sweeper
 
-## Conversation continuity
+The adapter runs an in-process timer that drops `conv_agents` rows
+older than `ADAPTER_IDLE_TTL_HOURS` (default 24) every
+`ADAPTER_SWEEPER_INTERVAL_MIN` minutes (default 30). Tune via env
+vars in `docker-compose.yml` if needed. Lazy GC: only the SQLite row
+is dropped; Cursor reclaims server-side agent state on its own
+schedule.
 
-There isn't any, in the strict sense. The proxy spawns a fresh `agent`
-per request and re-receives the full conversation history from
-LibreChat each turn. From the user's point of view it feels continuous;
-from the agent's point of view every turn is a new agent that happens
-to have read the prior transcript.
+### Workspace data isolation is leaky-by-default
 
-Phase 1 will replace this with real `Agent.resume` semantics in a
-custom adapter — see [`PHASE0.md`](PHASE0.md#continuity-is-librechat-replaying-full-history-not-agent---resume)
-and [`PHASE1.md`](PHASE1.md).
+A Cursor agent's filesystem view extends beyond its declared cwd —
+it can read the enclosing project tree, including `~/.cursor/chats/`
+(per-host chat history) and sibling workspaces inside
+`/app/workspaces/`. This is a Phase-2 concern. For pilot use with
+one operator, acceptable; for multi-user production, plan on
+per-agent containers or namespaced cwds.
 
 ## Repo layout
 
 ```
 .
-├── CLAUDE.md             # project kickoff doc (historical task list in §9–§11)
+├── CLAUDE.md             # project kickoff doc + agent rules of the road
 ├── README.md             # human-facing entry point
-├── docker-compose.yml    # LibreChat + Mongo
-├── librechat.yaml        # one custom endpoint per workspace
+├── docker-compose.yml    # LibreChat + Mongo + adapter
+├── librechat.yaml        # one custom endpoint → adapter
 ├── .env                  # secrets (gitignored)
 ├── .env.example          # schema of .env
 ├── docs/
 │   ├── CONTEXT.md        # doc lifecycle (read before editing other docs)
 │   ├── PLAN.md           # multi-phase plan
 │   ├── PHASE0.md         # Phase 0 narrative (frozen)
-│   ├── PHASE1.md         # Phase 1 scaffold (current)
-│   └── ARCHITECTURE.md   # this file
+│   ├── PHASE1.md         # Phase 1 narrative (frozen at end of phase)
+│   ├── PHASE2.md         # Phase 2 scaffold
+│   ├── ARCHITECTURE.md   # this file
+│   └── mcp/oreilly.md    # MCP integration guide
+├── adapter/              # the Cursor adapter (Fastify + @cursor/sdk@1.0.7)
+│   ├── Dockerfile
+│   ├── package.json
+│   ├── src/              # production code
+│   │   ├── index.ts
+│   │   ├── routes/
+│   │   ├── cursor/       # SDK boundary + rehydration + adapter shim
+│   │   ├── skills/       # manifest registry
+│   │   └── state/        # SQLite conv store + sweeper
+│   └── test/
+│       ├── README.md     # TDD conventions (.spec.md + 3-layer pyramid)
+│       ├── cursor/       # unit tests
+│       ├── routes/       # integration tests
+│       ├── state/        # mixed
+│       ├── evals/        # eval tests (live adapter)
+│       └── support/      # fakes, fixtures
 ├── workspaces/
-│   └── cmu-genai-v1/
-│       └── repo/         # CMU 10-X23 GenAI, as a git submodule
-└── .run/                 # gitignored runtime state (proxy log, mongo data)
+│   ├── cmu-genai-v1/         # CMU 10-X23 GenAI (submodule + manifest)
+│   ├── cmu-llm-systems-v1/   # CMU 11868 LLM Systems (submodule + manifest)
+│   ├── cursor-cookbook-v1/   # Cursor SDK cookbook (submodule + manifest)
+│   ├── context-mgmt-eval-v1/ # configured eval workspace (rules+skills+MCP)
+│   └── context-mgmt-eval-bare-v1/  # bare eval twin (no .cursor/)
+└── .run/                 # gitignored runtime state
+    ├── mongo-data/
+    ├── librechat-{uploads,logs,images}/
+    └── adapter/conv-state.sqlite
 ```
-
-`adapter/` is in CLAUDE.md §6 but does not exist yet — Phase 1
-deliverable.
 
 ## Limits known today
 
-- One workspace per proxy process.
 - Single shared Cursor account; no per-user cost attribution.
 - No SSO; LibreChat local auth only.
-- `usage.*` token counts in the OpenAI-shape responses are heuristics
-  (chars ÷ 4), not real billing data.
-- Workspace must be marked trusted by the proxy patch — adding new
-  workspaces will need the same trust handling.
+- `usage.*` token counts in adapter responses are heuristics
+  (`completion_chars ÷ 4`); real attribution will come from Cursor's
+  usage API when we wire it.
+- Cross-workspace agent visibility — see "Workspace data isolation"
+  in operational gotchas.
+- Title-gen contamination — LibreChat's titleConvo flow resumes the
+  same Cursor agent with a "summarize for title" prompt, which
+  enters the agent's history. Not visibly broken but worth tracking.
+
+## See also
+
+- [`PHASE1.md`](PHASE1.md) — narrative for everything that's
+  load-bearing above.
+- [`../adapter/test/README.md`](../adapter/test/README.md) — testing
+  conventions, including the `.spec.md` discipline.
+- [`mcp/oreilly.md`](mcp/oreilly.md) — O'Reilly MCP integration
+  reference.
