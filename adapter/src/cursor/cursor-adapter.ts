@@ -49,7 +49,7 @@ const SETTING_SOURCES = ["project"] as const;
  * placeholders are left as literal strings so a misconfigured token
  * surfaces as a 401 from the MCP server instead of a silent skip.
  */
-function loadMcpServers(workspaceDir: string): Record<string, McpServerConfig> | undefined {
+export function loadMcpServers(workspaceDir: string): Record<string, McpServerConfig> | undefined {
   const mcpPath = join(workspaceDir, ".cursor", "mcp.json");
   if (!existsSync(mcpPath)) return undefined;
   const raw = readFileSync(mcpPath, "utf8");
@@ -58,7 +58,7 @@ function loadMcpServers(workspaceDir: string): Record<string, McpServerConfig> |
   return expandEnv(parsed.mcpServers) as Record<string, McpServerConfig>;
 }
 
-function expandEnv(value: unknown): unknown {
+export function expandEnv(value: unknown): unknown {
   if (typeof value === "string") {
     return value.replace(/\$\{([A-Z_][A-Z0-9_]*)\}/g, (whole, name: string) => {
       const v = process.env[name];

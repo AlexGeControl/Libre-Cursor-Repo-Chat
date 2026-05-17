@@ -1,0 +1,271 @@
+# =============================================================================
+# librechat.yaml — annotated example for the Cursor-as-a-Service deployment.
+#
+# This file documents every option we've researched against the upstream
+# LibreChat source (v0.8.6-rc1, sibling clone at ../LibreChat). Copy to
+# `librechat.yaml`, uncomment what you need, leave the rest as comments.
+#
+# Companion docs:
+#   - docs/LibreChat/widget-map.md     (which widget each option controls)
+#   - docs/LibreChat/config-reference.md (alphabetical reference with defaults)
+#   - docs/LibreChat/mockup.html       (interactive widget ↔ key playground)
+#
+# Schema source of truth: ../LibreChat/packages/data-provider/src/config.ts
+# (the `interfaceSchema` and `endpointSchema`). The `version:` string is
+# unenforced (`config.ts:1339` — `version: z.string()`), so 1.3.5 accepts
+# every key below. Bump to 1.3.11 to silence the cosmetic startup warning.
+# =============================================================================
+
+version: 1.3.5
+cache: true
+
+# =============================================================================
+# interface — UI toggles
+# =============================================================================
+# All keys are optional. "permission-default" in the comments means an omitted
+# field falls back to the role's permission grant in upstream's roles.ts —
+# which for a fresh install usually means "enabled". To actually hide a
+# widget, write `false` explicitly. Source: packages/data-schemas/src/app/
+# interface.ts:30-59.
+
+interface:
+  # ─── core ──────────────────────────────────────────────────────────────────
+
+  # Top-bar model selector. Keep `true` for MVP — without it the user can't
+  # pick a workspace.
+  # Source: config.ts:903.
+  modelSelect: true
+
+  # Headline greeting on an empty thread. When unset, LibreChat synthesizes a
+  # time-of-day greeting + user name ("Good Evening, Yao"). Supports the
+  # `{{user.name}}` template token (no markdown, no other tokens).
+  # Source: config.ts:907; render: client/src/components/Chat/Landing.tsx:67-138.
+  # customWelcome: "Welcome to Cursor Workspaces, {{user.name}}. Pick a workspace from the model selector to chat with that team's distilled know-how."
+
+  # ─── sidebar panels ────────────────────────────────────────────────────────
+
+  # Bookmarks panel + top-bar bookmark menu (one toggle controls both).
+  # Source: config.ts:914; consume: useSideNavLinks.ts, Header.tsx:67-73.
+  bookmarks: false
+
+  # Prompts library panel. {use, create} sub-flags; `create: false` allows
+  # reading but not creating new prompts.
+  # Source: config.ts:922-928.
+  prompts:
+    use: false
+    create: false
+
+  # Memories panel (long-term cross-thread user facts). Cursor agents have
+  # their own per-agent memory; LibreChat's memories are orthogonal and not
+  # wired to the Cursor adapter, so safe to disable.
+  # Source: config.ts:916.
+  memories: false
+
+  # Agents builder panel AND the Agents endpoint in the model selector.
+  # `use: false` revokes the AGENTS permission, which useEndpoints.ts reads
+  # to drop Agents from the dropdown — belt-and-suspenders with
+  # ENDPOINTS=custom in .env.
+  # Source: config.ts:930-937.
+  agents:
+    use: false
+    create: false
+
+  # Skills panel (LibreChat's own skill framework — distinct from
+  # .cursor/skills/, which the Cursor adapter handles internally).
+  # Source: config.ts:939-946.
+  skills:
+    use: false
+    create: false
+
+  # MCP Builder panel (per-user MCP server manager). Separate from the global
+  # `mcpServers:` top-level block below. The Cursor adapter loads each
+  # workspace's `.cursor/mcp.json` internally, so this UI is moot for the
+  # pilot.
+  # Source: config.ts:948-955.
+  mcpServers:
+    use: false
+    create: false
+
+  # Sidebar Parameters panel (temperature / top-p / max-tokens sliders).
+  # Hides the *panel* but not the values on the wire — use
+  # `endpoints.custom[].dropParams` below for wire-level suppression.
+  # Source: config.ts:910; consume: useSideNavLinks.ts:182-194.
+  parameters: false
+
+  # ─── top bar ───────────────────────────────────────────────────────────────
+
+  # Saved parameter/model bundles. Useless for us — we control models
+  # server-side via workspace manifests.
+  # Source: config.ts:912; consume: Header.tsx:56-66.
+  presets: false
+
+  # Spawns side-by-side threads with different models for comparison.
+  # Useful for benchmarking; off by default to avoid raising expectations.
+  # Source: config.ts:918; consume: Header.tsx:74-76.
+  multiConvo: false
+
+  # "Incognito"-style chat — thread is not persisted to MongoDB.
+  # Source: config.ts:920; consume: Header.tsx:77.
+  temporaryChat: false
+
+  # ─── composer tools (each adds one row to the Tools ▾ dropdown) ────────────
+
+  # Code Interpreter row. Doesn't affect the Cursor adapter (it has its own
+  # tool layer); safe to hide.
+  # Source: config.ts:957.
+  runCode: false
+
+  # Web Search row.
+  # Source: config.ts:959.
+  webSearch: false
+
+  # File Search row (corpus search across user-uploaded files). Distinct from
+  # the composer's per-message attach button.
+  # Source: config.ts:961.
+  fileSearch: false
+
+  # Inline source-citation footnotes inside assistant messages. Unrelated to
+  # attach buttons. Cursor doesn't return this shape, so functionally a no-op
+  # for us.
+  # Source: config.ts:963.
+  fileCitations: false
+
+  # ─── access pickers ────────────────────────────────────────────────────────
+
+  # RBAC-style sharing UI. Hidden for MVP; LibreChat local auth has no groups.
+  # Source: config.ts:965-971.
+  peoplePicker:
+    users: false
+    groups: false
+    roles: false
+
+  # Agent marketplace. Schema default is already false; keep it that way.
+  # Source: config.ts:1005-1010.
+  marketplace:
+    use: false
+
+  # Remote agents. Schema default is already false.
+  # Source: config.ts:1019-1021.
+  remoteAgents:
+    use: false
+
+  # ─── footer links ──────────────────────────────────────────────────────────
+
+  # Footer "Privacy Policy" link. Source: config.ts:980-987.
+  # privacyPolicy:
+  #   externalUrl: "https://internal.example/privacy"
+  #   openNewTab: true
+
+  # Footer "Terms of Service" link. `modalAcceptance: true` shows a
+  # click-to-accept modal on first login.
+  # Source: config.ts:988-1003.
+  # termsOfService:
+  #   externalUrl: "https://internal.example/tos"
+  #   openNewTab: true
+  #   modalAcceptance: false
+
+# =============================================================================
+# endpoints.custom — the Cursor adapter endpoint
+# =============================================================================
+# Adding a workspace doesn't require editing this file — the adapter scans
+# `workspaces/*/manifest.json` at boot and `models.fetch: true` makes
+# LibreChat pull the result from /v1/models.
+
+endpoints:
+  custom:
+    - name: "Cursor Workspaces"
+      # `apiKey` is required by the upstream schema but ignored by our
+      # adapter — workspace access is controlled by the manifest registry.
+      apiKey: "unused"
+
+      # Intra-compose DNS: the adapter is a sibling service named `adapter`.
+      baseURL: "http://adapter:8080/v1"
+
+      # Custom HTTP headers forwarded to the adapter. The
+      # `{{LIBRECHAT_BODY_<FIELD>}}` placeholders are LibreChat's built-in
+      # substitution for body-allowlisted fields. Allowed: conversationId,
+      # messageId, parentMessageId.
+      # Source: packages/api/src/utils/env.ts → resolveHeaders().
+      headers:
+        X-LibreChat-Conversation-Id: "{{LIBRECHAT_BODY_CONVERSATIONID}}"
+        X-LibreChat-Message-Id: "{{LIBRECHAT_BODY_MESSAGEID}}"
+        X-LibreChat-Parent-Message-Id: "{{LIBRECHAT_BODY_PARENTMESSAGEID}}"
+
+      models:
+        # Static fallback list — used when `fetch: false` or fetch fails.
+        # Worth keeping at least one valid model id here so a broken adapter
+        # doesn't leave the selector empty on boot.
+        default:
+          - "cmu-genai-v1"
+          - "cmu-llm-systems-v1"
+          - "cursor-cookbook-v1"
+        # Hits `<baseURL>/v1/models` on boot and merges into the list.
+        fetch: true
+
+      # After the first user/assistant exchange LibreChat sends a hidden
+      # "summarize this thread in 5 words" prompt to `titleModel`. Known mild
+      # contamination — see docs/PHASE1.md "title-gen contamination".
+      titleConvo: true
+      titleModel: "cmu-genai-v1"
+
+      # Strip named fields from the outbound request body before the HTTP
+      # call. Smoking-gun consume site:
+      # packages/api/src/endpoints/openai/transform.ts:114-127.
+      # Our gpt-5.5-extra-high-fast backend rejects sampling params — list
+      # them here. Names match the OpenAI wire field names (snake_case).
+      dropParams:
+        - "temperature"
+        - "top_p"
+        - "presence_penalty"
+        - "frequency_penalty"
+        - "max_tokens"
+        - "stop"
+        - "user"
+
+      # Inject named fields into the outbound body. Runs *before* dropParams,
+      # so dropParams wins on overlap. Useful if a future model needs a
+      # hard-coded `reasoning_effort: "high"` etc.
+      # addParams:
+      #   reasoning_effort: "high"
+
+# =============================================================================
+# Out of scope for the MVP — commented stubs for the eventual operator
+# =============================================================================
+
+# Global MCP servers (separate from each workspace's .cursor/mcp.json).
+# Loaded for every conversation across all endpoints. Off by default for
+# this project — workspace manifests are the right level of granularity.
+# mcpServers:
+#   example-internal-tool:
+#     type: "http"
+#     url: "https://internal.example/mcp"
+#     headers:
+#       Authorization: "Bearer ${EXAMPLE_INTERNAL_TOKEN}"
+
+# Web-search provider configuration (only relevant if you enable
+# `interface.webSearch: true` above).
+# webSearch:
+#   serperApiKey: "${SERPER_API_KEY}"
+
+# Per-endpoint UI parameter customization. customParams.paramDefinitions lets
+# you re-shape the Parameters panel (label, type, default) per endpoint, but
+# does NOT strip params from the wire — use `dropParams` for that.
+# Source: config.ts:565-.
+# customParams:
+#   defaultParamsEndpoint: "custom"
+#   paramDefinitions: []
+
+# modelSpecs — global preset bundles in the model dropdown. NOT a drop
+# mechanism: even with `enforce: true`, a spec just *sets* values that get
+# sent. Wrong tool for suppressing fields; use `dropParams`.
+# modelSpecs:
+#   enforce: false
+#   prioritize: false
+#   list: []
+
+# Rate limits per role/endpoint. Defaults are generous; only override if you
+# hit production-scale abuse.
+# rateLimits:
+#   fileUploads:
+#     ipMax: 100
+#     ipWindowInMinutes: 60

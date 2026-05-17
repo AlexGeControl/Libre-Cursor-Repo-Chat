@@ -24,6 +24,17 @@ services:
       - ./.run/librechat-images:/app/client/public/images
       - ./.run/librechat-uploads:/app/uploads
       - ./.run/librechat-logs:/app/api/logs
+      # Brand overlay — the upstream image's static handler serves from
+      # dist/ first (`api/server/index.js:138-140` order: dist → fonts →
+      # assets), so we must overlay the *built* path. Bind-mounting on
+      # public/ alone doesn't work because Vite baked public/ INTO dist/
+      # at build time (contrary to what client/vite.config.ts:131
+      # suggests for source-mode builds — the upstream Docker image is
+      # built with publicDir effectively on).
+      - ./brand/logo.svg:/app/client/dist/assets/logo.svg:ro
+      - ./brand/favicon-16x16.png:/app/client/dist/assets/favicon-16x16.png:ro
+      - ./brand/favicon-32x32.png:/app/client/dist/assets/favicon-32x32.png:ro
+      - ./brand/apple-touch-icon-180x180.png:/app/client/dist/assets/apple-touch-icon-180x180.png:ro
 
   mongodb:
     image: mongo:8.0

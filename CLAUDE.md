@@ -1,16 +1,21 @@
 # Cursor-as-a-Service — Project Bootstrap
 
 > **Status note (2026-05-17):** This is the original kickoff document.
-> **Phase 1 is done**; the system runs as a Docker-compose stack with
-> our own Fastify + `@cursor/sdk@1.0.7` adapter (not the
-> `cursor-api-proxy` referenced in §3 below). The live plan is in
+> **Phases 1 and 2 are done**; the system runs as a Docker-compose
+> stack with our own Fastify + `@cursor/sdk@1.0.7` adapter (not the
+> `cursor-api-proxy` referenced in §3 below), the LibreChat UI is
+> locked down to the MVP surface with NVIDIA branding overlaid via
+> docker bind-mounts, and the adapter has 94 deterministic tests
+> backing six co-located `.spec.md` contracts. The live plan is in
 > [`docs/PLAN.md`](docs/PLAN.md), the current architecture is in
-> [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), and the Phase 2
+> [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), and the Phase 3
 > handoff with bootstrap instructions for the next session lives in
-> [`docs/PHASE2.md`](docs/PHASE2.md). **Sections §3 through §13 below
-> are historical** — they describe the original Phase 0 design, not
-> the system as it runs today. Use them only as design rationale.
-> This project uses a phase-based doc lifecycle — see
+> [`docs/PHASE3.md`](docs/PHASE3.md). LibreChat configuration
+> reference (config-key → widget map, interactive mockup) is in
+> [`docs/LibreChat/`](docs/LibreChat/). **Sections §3 through §13
+> below are historical** — they describe the original Phase 0
+> design, not the system as it runs today. Use them only as design
+> rationale. This project uses a phase-based doc lifecycle — see
 > [`docs/CONTEXT.md`](docs/CONTEXT.md) before editing PLAN.md,
 > PHASE\*.md, or ARCHITECTURE.md.
 

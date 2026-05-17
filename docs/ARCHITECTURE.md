@@ -118,6 +118,123 @@ or `Agent.resume`. `${ENV_VAR}` placeholders in `mcp.json` headers
 are expanded against `process.env` before handoff — that's how the
 O'Reilly MCP server gets its token without committing it.
 
+## LibreChat UI configuration
+
+The user-facing chat UI is locked down to the MVP surface via
+`librechat.yaml` and a small set of env vars. For the full catalog
+of options (and what each widget maps to), see
+[`LibreChat/`](LibreChat/). Below is the operational summary —
+what's wired today, why, and how to extend it.
+
+### `interface:` block (yaml-driven UI lockdown)
+
+`librechat.yaml` declares an explicit `interface:` block that turns
+off every sidebar panel and top-bar control outside the MVP. Only
+`modelSelect: true` and `bookmarks: true` remain on, plus the
+chat-history sidebar and input composer (which have no toggles).
+All five composer "Tools" rows (`runCode`, `webSearch`,
+`fileSearch`, `skills.use`, `mcpServers.use`) are `false`, so the
+Tools dropdown itself disappears.
+
+Two widgets are fork-only and still visible: the **Files** sidebar
+panel and the **Export menu** shell. Both are tracked in
+[`PHASE3.md`](PHASE3.md) for the eventual UI fork.
+
+### `dropParams` (wire-level param suppression)
+
+The Cursor adapter's upstream model (default
+`gpt-5.5-extra-high-fast`) rejects sampling params with a 4xx. The
+custom endpoint in `librechat.yaml` lists them in `dropParams`:
+
+```yaml
+dropParams:
+  - "temperature"
+  - "top_p"
+  - "presence_penalty"
+  - "frequency_penalty"
+  - "max_tokens"
+  - "stop"
+  - "user"
+```
+
+Upstream consume site:
+`packages/api/src/endpoints/openai/transform.ts:114-127` deletes
+each named field from the outbound body after defaults are applied
+but before the HTTP call is built. This is orthogonal to
+`interface.parameters: false` — that key hides the slider UI but
+does **not** strip the values from the request. Both keys are
+required: `dropParams` for correctness, `interface.parameters:
+false` so the user doesn't see sliders that have no effect.
+
+### Branding env vars
+
+| Env var | Value | What it controls |
+|---|---|---|
+| `APP_TITLE` | `AIOF Agentic Engineer` | Browser tab title (dynamic, post-mount) |
+| `CUSTOM_FOOTER` | `Agentic Engineer for SCG Efficiency - Applied AI Team` | Footer text (replaces upstream `[LibreChat <ver>] - Every AI for Everyone`) |
+| `HELP_AND_FAQ_URL` | `https://nvidia.glean.com` | In-app Help & FAQ link target |
+| `ALLOW_SHARED_LINKS` | `true` | Share-link UI in the Export menu + `/share/...` route |
+| `SEARCH` | `false` | Conversation-search bar in the sidebar + `/api/search` route (avoids the Meilisearch dep) |
+
+### Brand asset overlay
+
+`docker-compose.yml` mounts four files from `./brand/` into the api
+container's **`dist/assets/`** (NOT `public/assets/`):
+
+```yaml
+- ./brand/logo.svg:/app/client/dist/assets/logo.svg:ro
+- ./brand/favicon-16x16.png:/app/client/dist/assets/favicon-16x16.png:ro
+- ./brand/favicon-32x32.png:/app/client/dist/assets/favicon-32x32.png:ro
+- ./brand/apple-touch-icon-180x180.png:/app/client/dist/assets/apple-touch-icon-180x180.png:ro
+```
+
+The upstream `ghcr.io/danny-avila/librechat:latest` image bakes
+`public/assets/` into `dist/assets/` at image-build time, and the
+static handler serves `dist` first
+(`api/server/index.js:138-140`). Mounting at `public/assets/`
+alone is **silently ineffective** — see PHASE2.md → "Slice 2 — asset
+overlay path" finding. The active path is `dist/assets/`.
+
+`brand/logo.svg` is a Simple Icons NVIDIA glyph (MIT-licensed)
+recolored to NVIDIA green `#76B900` on transparent. The three PNG
+favicons are rasterized from it.
+
+### Refreshing a brand asset
+
+If you edit anything under `brand/`, **restart the api container**:
+
+```bash
+docker compose restart api
+```
+
+Docker bind-mounts on single files pin to the host inode.
+Atomic-rename writes (which `Edit`/`Write`/most editors use) create
+a new inode, breaking the mount — the container keeps serving the
+old file until the next restart. Directory mounts don't have this
+problem; single-file mounts do. To regenerate the PNGs from a
+recolored SVG, use the running container's bundled `sharp` 0.33.5:
+
+```bash
+docker cp brand/logo.svg librechat-api:/tmp/logo.svg
+docker exec librechat-api node -e "
+const sharp = require('sharp'), fs = require('fs');
+const svg = fs.readFileSync('/tmp/logo.svg');
+for (const { size, out } of [
+  { size: 16,  out: '/tmp/favicon-16x16.png' },
+  { size: 32,  out: '/tmp/favicon-32x32.png' },
+  { size: 180, out: '/tmp/apple-touch-icon-180x180.png' },
+]) {
+  const pad = Math.round(size * 0.12), inner = size - pad * 2;
+  sharp(svg).resize(inner, inner, { fit:'contain', background:{r:0,g:0,b:0,alpha:0} })
+    .extend({ top:pad, bottom:pad, left:pad, right:pad, background:{r:0,g:0,b:0,alpha:0} })
+    .png().toFile(out);
+}"
+for f in favicon-16x16 favicon-32x32 apple-touch-icon-180x180; do
+  docker cp librechat-api:/tmp/$f.png brand/$f.png
+done
+docker compose restart api
+```
+
 ## Operating it
 
 ### First-run setup
@@ -339,51 +456,83 @@ schedule.
 A Cursor agent's filesystem view extends beyond its declared cwd —
 it can read the enclosing project tree, including `~/.cursor/chats/`
 (per-host chat history) and sibling workspaces inside
-`/app/workspaces/`. This is a Phase-2 concern. For pilot use with
-one operator, acceptable; for multi-user production, plan on
-per-agent containers or namespaced cwds.
+`/app/workspaces/`. Tracked in [`PHASE3.md`](PHASE3.md) for
+production hardening. For pilot use with one operator, acceptable;
+for multi-user production, plan on per-agent containers or
+namespaced cwds.
+
+### `dropParams` is required for `gpt-5.5-extra-high-fast`
+
+The custom-endpoint `dropParams` list in `librechat.yaml` strips
+seven sampling fields (`temperature`, `top_p`,
+`presence_penalty`, `frequency_penalty`, `max_tokens`, `stop`,
+`user`) from outbound requests. The default model rejects these
+with a 4xx — removing the `dropParams` block breaks every chat
+turn. See "LibreChat UI configuration" above for the full
+rationale.
+
+### Brand assets mount at `dist/assets/`, not `public/assets/`
+
+The upstream LibreChat image bakes `public/assets/` into
+`dist/assets/` at build time, and the static handler serves `dist`
+first. Bind-mounting at `public/assets/` is silently ineffective.
+See "LibreChat UI configuration → Brand asset overlay" above.
+
+### Single-file bind-mounts pin to inodes — restart on asset edit
+
+Docker bind-mounts on individual files pin to host inodes. Any edit
+that uses atomic rename (which `Edit`/`Write`/most editors do)
+creates a new inode and breaks the mount; the container serves the
+old file until restarted. After editing anything under `brand/`,
+run `docker compose restart api`. Directory mounts don't have this
+problem.
 
 ## Repo layout
 
 ```
 .
-├── CLAUDE.md             # project kickoff doc + agent rules of the road
-├── README.md             # human-facing entry point
-├── docker-compose.yml    # LibreChat + Mongo + adapter
-├── librechat.yaml        # one custom endpoint → adapter
-├── .env                  # secrets (gitignored)
-├── .env.example          # schema of .env
+├── CLAUDE.md                # project kickoff doc + agent rules of the road
+├── README.md                # human-facing entry point
+├── docker-compose.yml       # LibreChat + Mongo + adapter
+├── librechat.yaml           # live LibreChat config (interface + custom endpoint)
+├── librechat.yaml.example   # annotated reference (every researched key)
+├── .env                     # secrets (gitignored)
+├── .env.example             # schema of .env (annotated)
+├── brand/                   # NVIDIA logo + favicons mounted into LibreChat (see "LibreChat UI configuration")
 ├── docs/
-│   ├── CONTEXT.md        # doc lifecycle (read before editing other docs)
-│   ├── PLAN.md           # multi-phase plan
-│   ├── PHASE0.md         # Phase 0 narrative (frozen)
-│   ├── PHASE1.md         # Phase 1 narrative (frozen at end of phase)
-│   ├── PHASE2.md         # Phase 2 scaffold
-│   ├── ARCHITECTURE.md   # this file
-│   └── mcp/oreilly.md    # MCP integration guide
-├── adapter/              # the Cursor adapter (Fastify + @cursor/sdk@1.0.7)
+│   ├── CONTEXT.md           # doc lifecycle (read before editing other docs)
+│   ├── PLAN.md              # multi-phase plan
+│   ├── PHASE0.md            # Phase 0 narrative (frozen)
+│   ├── PHASE1.md            # Phase 1 narrative (frozen)
+│   ├── PHASE2.md            # Phase 2 narrative (frozen — MVP hardening)
+│   ├── PHASE3.md            # Phase 3 scaffold (inherited open questions)
+│   ├── ARCHITECTURE.md      # this file
+│   ├── LibreChat/           # widget-map + config-reference + interactive mockup
+│   └── mcp/oreilly.md       # MCP integration guide
+├── adapter/                 # the Cursor adapter (Fastify + @cursor/sdk@1.0.7)
 │   ├── Dockerfile
 │   ├── package.json
-│   ├── src/              # production code
+│   ├── src/                 # production code (each module ships a .spec.md)
 │   │   ├── index.ts
 │   │   ├── routes/
-│   │   ├── cursor/       # SDK boundary + rehydration + adapter shim
-│   │   ├── skills/       # manifest registry
-│   │   └── state/        # SQLite conv store + sweeper
-│   └── test/
-│       ├── README.md     # TDD conventions (.spec.md + 3-layer pyramid)
-│       ├── cursor/       # unit tests
-│       ├── routes/       # integration tests
-│       ├── state/        # mixed
-│       ├── evals/        # eval tests (live adapter)
-│       └── support/      # fakes, fixtures
+│   │   ├── cursor/          # SDK boundary + rehydration + MCP loader
+│   │   ├── skills/          # manifest registry
+│   │   └── state/           # SQLite conv store + sweeper
+│   └── test/                # 94 tests (cursor + routes + state + skills + evals)
+│       ├── README.md        # TDD conventions (.spec.md + 3-layer pyramid)
+│       ├── cursor/          # unit tests
+│       ├── routes/          # integration tests
+│       ├── state/           # mixed
+│       ├── skills/          # integration (real-fs fixtures)
+│       ├── evals/           # eval tests (live adapter)
+│       └── support/         # fakes, fixtures
 ├── workspaces/
-│   ├── cmu-genai-v1/         # CMU 10-X23 GenAI (submodule + manifest)
-│   ├── cmu-llm-systems-v1/   # CMU 11868 LLM Systems (submodule + manifest)
-│   ├── cursor-cookbook-v1/   # Cursor SDK cookbook (submodule + manifest)
-│   ├── context-mgmt-eval-v1/ # configured eval workspace (rules+skills+MCP)
-│   └── context-mgmt-eval-bare-v1/  # bare eval twin (no .cursor/)
-└── .run/                 # gitignored runtime state
+│   ├── cmu-genai-v1/             # CMU 10-X23 GenAI (submodule + manifest)
+│   ├── cmu-llm-systems-v1/       # CMU 11868 LLM Systems (submodule + manifest)
+│   ├── cursor-cookbook-v1/       # Cursor SDK cookbook (submodule + manifest)
+│   ├── context-mgmt-eval-v1/     # configured eval workspace (rules+skills+MCP)
+│   └── context-mgmt-eval-bare-v1/ # bare eval twin (no .cursor/)
+└── .run/                    # gitignored runtime state
     ├── mongo-data/
     ├── librechat-{uploads,logs,images}/
     └── adapter/conv-state.sqlite

@@ -1,0 +1,598 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>LibreChat config → widget mock</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --panel: #1a212a;
+    --panel-2: #232c37;
+    --border: #2a3441;
+    --text: #e6edf3;
+    --text-dim: #8b98a5;
+    --text-disabled: #4a5564;
+    --accent: #76b900;          /* NVIDIA green, aspirational */
+    --accent-dim: #4e7a00;
+    --yaml: #76b900;
+    --env: #f0a500;
+    --capability: #6b9bd1;
+    --unconditional: #c44a4a;
+    --fork-only: #c44a4a;
+    --mvp: #888;
+    --send: #76b900;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.4;
+  }
+  /* ─── Layout ───────────────────────────────────────────── */
+  .app {
+    display: grid;
+    grid-template-columns: 260px 1fr 360px;
+    grid-template-rows: 100vh;
+    height: 100vh;
+    overflow: hidden;
+  }
+  /* ─── Sidebar ──────────────────────────────────────────── */
+  .sidebar {
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    padding: 12px;
+  }
+  .sidebar h2 {
+    font-size: 11px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin: 16px 4px 6px;
+    letter-spacing: 0.5px;
+  }
+  /* ─── Top + center ─────────────────────────────────────── */
+  .center {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .topbar {
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .topbar .spacer { flex: 1; }
+  .thread {
+    flex: 1;
+    overflow-y: auto;
+    padding: 32px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .greeting {
+    font-size: 28px;
+    font-weight: 300;
+    margin: 80px 0 24px;
+    color: var(--text);
+  }
+  .greeting small {
+    display: block;
+    font-size: 12px;
+    margin-top: 6px;
+    color: var(--text-dim);
+    font-family: monospace;
+  }
+  .composer {
+    margin: 16px 32px 8px;
+    padding: 12px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .composer input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--text);
+    font-size: 14px;
+    outline: none;
+    padding: 6px;
+  }
+  .footer {
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 12px;
+    padding: 8px;
+    border-top: 1px solid var(--border);
+  }
+  /* ─── Widget cards ─────────────────────────────────────── */
+  .widget {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    border-radius: 6px;
+    margin: 2px 0;
+    background: var(--panel-2);
+    border: 1px solid transparent;
+    font-size: 13px;
+    transition: opacity 0.12s, filter 0.12s;
+  }
+  .widget .key {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    padding: 1px 6px;
+    border-radius: 3px;
+    background: rgba(255,255,255,0.04);
+    margin-left: auto;
+    white-space: nowrap;
+  }
+  .widget.yaml      { border-left: 3px solid var(--yaml); }
+  .widget.env       { border-left: 3px solid var(--env); }
+  .widget.capability{ border-left: 3px solid var(--capability); }
+  .widget.fork      { border-left: 3px solid var(--fork-only); }
+  .widget.mvp       { border-left: 3px solid var(--mvp); }
+  .widget.hidden {
+    opacity: 0.18;
+    filter: grayscale(1);
+    text-decoration: line-through;
+    pointer-events: none;
+  }
+  .widget .icon { width: 16px; text-align: center; opacity: 0.8; }
+
+  /* Inline (top-bar / composer) widgets */
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 12px;
+    font-family: ui-monospace, monospace;
+  }
+  .pill .label { color: var(--text); }
+  .pill .key { color: var(--text-dim); font-size: 10px; }
+  .pill.yaml      { border-color: var(--yaml); }
+  .pill.env       { border-color: var(--env); }
+  .pill.capability{ border-color: var(--capability); }
+  .pill.fork      { border-color: var(--fork-only); }
+  .pill.mvp       { border-color: var(--mvp); }
+  .pill.send { background: var(--send); color: #000; border-color: var(--send); }
+  .pill.hidden {
+    opacity: 0.18;
+    filter: grayscale(1);
+    text-decoration: line-through;
+  }
+
+  /* ─── Right control panel ──────────────────────────────── */
+  .controls {
+    background: var(--panel);
+    border-left: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 16px;
+  }
+  .controls h1 {
+    font-size: 14px;
+    margin: 0 0 4px;
+    color: var(--text);
+  }
+  .controls .sub {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-bottom: 16px;
+  }
+  .controls h3 {
+    font-size: 11px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin: 18px 0 6px;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 4px;
+  }
+  .ctl {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 0;
+    font-family: ui-monospace, monospace;
+    font-size: 11px;
+  }
+  .ctl input[type="checkbox"] { accent-color: var(--accent); }
+  .ctl label { flex: 1; color: var(--text); cursor: pointer; }
+  .ctl .badge {
+    font-size: 9px;
+    text-transform: uppercase;
+    padding: 1px 5px;
+    border-radius: 3px;
+    color: #000;
+    font-weight: 600;
+  }
+  .badge.yaml      { background: var(--yaml); }
+  .badge.env       { background: var(--env); }
+  .badge.capability{ background: var(--capability); }
+  .badge.fork      { background: var(--fork-only); }
+  .badge.mvp       { background: var(--mvp); color: var(--text); }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 8px 0 16px;
+    font-size: 10px;
+  }
+  .legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .legend i {
+    width: 10px;
+    height: 10px;
+    display: inline-block;
+    border-radius: 2px;
+  }
+
+  .actions {
+    display: flex;
+    gap: 6px;
+    margin: 8px 0;
+  }
+  .actions button {
+    flex: 1;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 8px;
+    font-size: 11px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: ui-monospace, monospace;
+  }
+  .actions button:hover { background: var(--border); }
+
+  details { margin-top: 4px; }
+  details summary {
+    cursor: pointer;
+    font-size: 11px;
+    color: var(--text-dim);
+    padding: 2px 0;
+  }
+
+  .threadnav .convo-item {
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    color: var(--text-dim);
+    cursor: default;
+  }
+  .threadnav .convo-item:hover { background: var(--panel-2); }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ═══ Sidebar ═══════════════════════════════════════════ -->
+  <div class="sidebar" id="sidebar">
+    <div class="widget mvp" data-id="newchat">
+      <span class="icon">+</span><span>New Chat</span>
+      <span class="key">— MVP</span>
+    </div>
+
+    <div class="widget env" data-id="search">
+      <span class="icon">🔍</span><span>Search conversations</span>
+      <span class="key">env: SEARCH</span>
+    </div>
+
+    <h2>Recent</h2>
+    <div class="threadnav">
+      <div class="convo-item">Cursor adapter test #1</div>
+      <div class="convo-item">CMU GenAI lecture notes</div>
+      <div class="convo-item">SystemVerilog stim review</div>
+    </div>
+
+    <h2>Panels</h2>
+    <div class="widget yaml" data-id="bookmarks">
+      <span class="icon">★</span><span>Bookmarks</span>
+      <span class="key">interface.bookmarks</span>
+    </div>
+    <div class="widget yaml" data-id="prompts">
+      <span class="icon">📝</span><span>Prompts</span>
+      <span class="key">interface.prompts.use</span>
+    </div>
+    <div class="widget yaml" data-id="memories">
+      <span class="icon">🧠</span><span>Memories</span>
+      <span class="key">interface.memories</span>
+    </div>
+    <div class="widget yaml" data-id="agents">
+      <span class="icon">🤖</span><span>Agents</span>
+      <span class="key">interface.agents.use</span>
+    </div>
+    <div class="widget yaml" data-id="skills">
+      <span class="icon">⚙️</span><span>Skills</span>
+      <span class="key">interface.skills.use</span>
+    </div>
+    <div class="widget yaml" data-id="mcpServers">
+      <span class="icon">🔌</span><span>MCP Builder</span>
+      <span class="key">interface.mcpServers.use</span>
+    </div>
+    <div class="widget fork" data-id="files" title="No yaml/env toggle — fork-only">
+      <span class="icon">📎</span><span>Files</span>
+      <span class="key">fork-only</span>
+    </div>
+    <div class="widget yaml" data-id="parameters">
+      <span class="icon">🎚</span><span>Parameters</span>
+      <span class="key">interface.parameters</span>
+    </div>
+  </div>
+
+  <!-- ═══ Center column ════════════════════════════════════ -->
+  <div class="center">
+    <div class="topbar" id="topbar">
+      <span class="pill yaml" data-id="modelSelect">
+        <span class="label">Select a Model ▾</span>
+        <span class="key">interface.modelSelect</span>
+      </span>
+      <span class="pill yaml" data-id="presets">
+        <span class="label">Presets</span>
+        <span class="key">interface.presets</span>
+      </span>
+      <span class="pill yaml" data-id="bookmarks">
+        <span class="label">★ Bookmark</span>
+        <span class="key">interface.bookmarks</span>
+      </span>
+      <span class="pill yaml" data-id="multiConvo">
+        <span class="label">+ Multi-Convo</span>
+        <span class="key">interface.multiConvo</span>
+      </span>
+      <span class="spacer"></span>
+      <span class="pill yaml" data-id="temporaryChat">
+        <span class="label">Temp Chat</span>
+        <span class="key">interface.temporaryChat</span>
+      </span>
+      <span class="pill fork" data-id="exportmenu" title="Menu shell is unconditional (fork-only); Share item inside is env-gated">
+        <span class="label">⋯ Export</span>
+        <span class="key">fork-only shell</span>
+      </span>
+      <span class="pill env" data-id="share">
+        <span class="label">  ↳ Share Link</span>
+        <span class="key">env: ALLOW_SHARED_LINKS</span>
+      </span>
+    </div>
+
+    <div class="thread">
+      <div class="greeting" id="greeting-block">
+        <span id="greeting-text">Good Evening, Yao</span>
+        <small id="greeting-key">interface.customWelcome — fallback: time-of-day + user.name</small>
+      </div>
+    </div>
+
+    <div class="composer">
+      <span class="pill capability" data-id="attachfile" title="Gated by endpoint capability, not interface.*">
+        <span class="label">📎 Attach</span>
+        <span class="key">capability</span>
+      </span>
+      <span class="pill yaml" data-id="toolsdropdown" title="Aggregator — visible if ANY tool below is enabled">
+        <span class="label">⚙ Tools ▾</span>
+        <span class="key">aggregator</span>
+      </span>
+      <input type="text" placeholder="Message Cursor Workspaces…" disabled>
+      <span class="pill send mvp" data-id="send">
+        <span class="label">Send</span>
+      </span>
+    </div>
+
+    <!-- Tools dropdown contents (rendered as a sub-list so you can see what aggregates) -->
+    <div style="margin: 0 32px 12px; padding: 8px 12px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; font-size: 11px;" id="toolsdropdown-contents">
+      <div style="color: var(--text-dim); margin-bottom: 4px;">Tools ▾ contents (each row gated independently):</div>
+      <div class="widget yaml" data-id="runCode" style="margin: 2px 0;">
+        <span class="icon">⚡</span><span>Run Code</span>
+        <span class="key">interface.runCode</span>
+      </div>
+      <div class="widget yaml" data-id="webSearch" style="margin: 2px 0;">
+        <span class="icon">🌐</span><span>Web Search</span>
+        <span class="key">interface.webSearch</span>
+      </div>
+      <div class="widget yaml" data-id="fileSearch" style="margin: 2px 0;">
+        <span class="icon">🔎</span><span>File Search</span>
+        <span class="key">interface.fileSearch</span>
+      </div>
+      <div class="widget yaml" data-id="skills" style="margin: 2px 0;">
+        <span class="icon">⚙️</span><span>Skills</span>
+        <span class="key">interface.skills.use</span>
+      </div>
+      <div class="widget yaml" data-id="mcpServers" style="margin: 2px 0;">
+        <span class="icon">🔌</span><span>MCP Servers</span>
+        <span class="key">interface.mcpServers.use</span>
+      </div>
+    </div>
+
+    <div class="footer" id="footer">
+      <span id="footer-text">[LibreChat v0.8.6-rc1](…) - Every AI for Everyone</span>
+      <small style="display:block; font-family: monospace; margin-top: 2px; opacity: 0.7;">
+        env: CUSTOM_FOOTER (when unset, shows default above) • env: APP_TITLE controls browser tab
+      </small>
+    </div>
+  </div>
+
+  <!-- ═══ Right control panel ══════════════════════════════ -->
+  <div class="controls">
+    <h1>Config toggle playground</h1>
+    <div class="sub">
+      Toggle each key to see which widget(s) it controls.
+      Widgets that disappear from the mock disappear from the real
+      LibreChat UI for the same reason.
+    </div>
+
+    <div class="legend">
+      <span><i style="background: var(--yaml)"></i> yaml</span>
+      <span><i style="background: var(--env)"></i> env</span>
+      <span><i style="background: var(--capability)"></i> capability</span>
+      <span><i style="background: var(--fork-only)"></i> fork-only</span>
+      <span><i style="background: var(--mvp)"></i> MVP-permanent</span>
+    </div>
+
+    <div class="actions">
+      <button onclick="setAll(true)">All on</button>
+      <button onclick="applyMVP()">MVP preset</button>
+      <button onclick="setAll(false)">All off (yaml/env only)</button>
+    </div>
+
+    <h3>interface: (yaml)</h3>
+    <div class="ctl"><input type="checkbox" id="t-modelSelect" checked><label for="t-modelSelect">interface.modelSelect</label><span class="badge yaml">yaml</span></div>
+    <div class="ctl"><input type="checkbox" id="t-customWelcome" checked><label for="t-customWelcome">interface.customWelcome (set?)</label><span class="badge yaml">yaml</span></div>
+    <div class="ctl"><input type="checkbox" id="t-parameters" checked><label for="t-parameters">interface.parameters</label><span class="badge yaml">yaml</span></div>
+    <div class="ctl"><input type="checkbox" id="t-presets" checked><label for="t-presets">interface.presets</label><span class="badge yaml">yaml</span></div>
+    <div class="ctl"><input type="checkbox" id="t-bookmarks" checked><label for="t-bookmarks">interface.bookmarks</label><span class="badge yaml">yaml</span></div>
+    <div class="ctl"><input type="checkbox" id="t-memories" checked><label for="t-memories">interface.memories</label><span class="badge yaml">yaml</span></div>
+    <div class="ctl"><input type="checkbox" id="t-multiConvo" checked><label for="t-multiConvo">interface.multiConvo</label><span class="badge yaml">yaml</span></div>
+    <div class="ctl"><input type="checkbox" id="t-temporaryChat" checked><label for="t-temporaryChat">interface.temporaryChat</label><span class="badge yaml">yaml</span></div>
+    <div class="ctl"><input type="checkbox" id="t-prompts" checked><label for="t-prompts">interface.prompts.use</label><span class="badge yaml">yaml</span></div>
+    <div class="ctl"><input type="checkbox" id="t-agents" checked><label for="t-agents">interface.agents.use</label><span class="badge yaml">yaml</span></div>
+    <div class="ctl"><input type="checkbox" id="t-skills" checked><label for="t-skills">interface.skills.use</label><span class="badge yaml">yaml</span></div>
+    <div class="ctl"><input type="checkbox" id="t-mcpServers" checked><label for="t-mcpServers">interface.mcpServers.use</label><span class="badge yaml">yaml</span></div>
+    <div class="ctl"><input type="checkbox" id="t-runCode" checked><label for="t-runCode">interface.runCode</label><span class="badge yaml">yaml</span></div>
+    <div class="ctl"><input type="checkbox" id="t-webSearch" checked><label for="t-webSearch">interface.webSearch</label><span class="badge yaml">yaml</span></div>
+    <div class="ctl"><input type="checkbox" id="t-fileSearch" checked><label for="t-fileSearch">interface.fileSearch</label><span class="badge yaml">yaml</span></div>
+
+    <h3>env vars (.env)</h3>
+    <div class="ctl"><input type="checkbox" id="t-search" checked><label for="t-search">SEARCH</label><span class="badge env">env</span></div>
+    <div class="ctl"><input type="checkbox" id="t-share" checked><label for="t-share">ALLOW_SHARED_LINKS</label><span class="badge env">env</span></div>
+    <div class="ctl"><input type="checkbox" id="t-appTitle" checked><label for="t-appTitle">APP_TITLE / CUSTOM_FOOTER (set?)</label><span class="badge env">env</span></div>
+
+    <h3>Capability / fork-only</h3>
+    <div class="ctl"><input type="checkbox" id="t-attachfile"><label for="t-attachfile">attach button (endpoint capability)</label><span class="badge capability">cap</span></div>
+    <div class="ctl"><input type="checkbox" id="t-files" checked disabled><label for="t-files" style="opacity:0.6">Files panel (unconditional)</label><span class="badge fork">fork</span></div>
+    <div class="ctl"><input type="checkbox" id="t-exportmenu" checked disabled><label for="t-exportmenu" style="opacity:0.6">Export menu shell</label><span class="badge fork">fork</span></div>
+
+    <details>
+      <summary>What "MVP preset" turns on</summary>
+      <p style="font-size: 11px; color: var(--text-dim); padding: 6px 0;">
+        Model selector + new chat + history + custom welcome +
+        send. Everything else off. Files panel and Export menu shell
+        remain visible (fork-only).
+      </p>
+    </details>
+
+    <details>
+      <summary>Where each toggle is consumed</summary>
+      <p style="font-size: 11px; color: var(--text-dim); padding: 6px 0;">
+        See <code>widget-map.md</code> for the file:line citation
+        per widget. The mockup mirrors the upstream gating logic in
+        <code>useSideNavLinks.ts</code>, <code>Header.tsx</code>,
+        <code>Landing.tsx</code>, <code>ToolsDropdown.tsx</code>,
+        <code>Footer.tsx</code>.
+      </p>
+    </details>
+  </div>
+</div>
+
+<script>
+  // Map control id → list of widget data-ids it affects.
+  // Most are 1:1; a few (skills, mcpServers, bookmarks) drive two widgets.
+  const map = {
+    'modelSelect':    ['modelSelect'],
+    'customWelcome':  ['greeting-block'],
+    'parameters':     ['parameters'],
+    'presets':        ['presets'],
+    'bookmarks':      ['bookmarks'],               // sidebar panel
+    'memories':       ['memories'],
+    'multiConvo':     ['multiConvo'],
+    'temporaryChat':  ['temporaryChat'],
+    'prompts':        ['prompts'],
+    'agents':         ['agents'],
+    'skills':         ['skills'],                  // sidebar + Tools row
+    'mcpServers':     ['mcpServers'],              // sidebar + Tools row
+    'runCode':        ['runCode'],
+    'webSearch':      ['webSearch'],
+    'fileSearch':     ['fileSearch'],
+    'search':         ['search'],
+    'share':          ['share'],
+    'appTitle':       ['footer'],
+    'attachfile':     ['attachfile'],
+    'files':          ['files'],
+    'exportmenu':     ['exportmenu'],
+  };
+
+  const ctlIds = Object.keys(map);
+
+  function applyAll() {
+    for (const id of ctlIds) {
+      const checked = document.getElementById('t-' + id).checked;
+      for (const widgetId of map[id]) {
+        const els = document.querySelectorAll('[data-id="' + widgetId + '"]');
+        els.forEach(el => el.classList.toggle('hidden', !checked));
+      }
+    }
+    // Special: greeting text. If customWelcome is set, swap text;
+    // if not, show the auto greeting.
+    const cw = document.getElementById('t-customWelcome').checked;
+    const txt = document.getElementById('greeting-text');
+    const key = document.getElementById('greeting-key');
+    if (cw) {
+      txt.textContent = 'Welcome to Cursor Workspaces, Yao';
+      key.textContent = 'interface.customWelcome (set, with {{user.name}})';
+    } else {
+      txt.textContent = 'Good Evening, Yao';
+      key.textContent = 'interface.customWelcome (unset → auto greeting)';
+    }
+    // Footer text mirror.
+    const at = document.getElementById('t-appTitle').checked;
+    const ft = document.getElementById('footer-text');
+    if (at) {
+      ft.textContent = 'Cursor Workspaces — NVIDIA HW Infra | Built on LibreChat';
+    } else {
+      ft.textContent = '[LibreChat v0.8.6-rc1](…) - Every AI for Everyone';
+    }
+    // Tools dropdown is an aggregator — hide it if ALL its rows are off.
+    const toolsRows = ['runCode','webSearch','fileSearch','skills','mcpServers'];
+    const anyOn = toolsRows.some(id => document.getElementById('t-' + id).checked);
+    document.querySelectorAll('[data-id="toolsdropdown"], #toolsdropdown-contents').forEach(el => {
+      el.classList.toggle('hidden', !anyOn);
+    });
+  }
+
+  function setAll(on) {
+    for (const id of ctlIds) {
+      const el = document.getElementById('t-' + id);
+      if (el && !el.disabled) el.checked = on;
+    }
+    applyAll();
+  }
+
+  function applyMVP() {
+    // The "ship to NVIDIA day 1" preset: only model selector + custom welcome.
+    const onlyOn = ['modelSelect', 'customWelcome'];
+    for (const id of ctlIds) {
+      const el = document.getElementById('t-' + id);
+      if (el && !el.disabled) el.checked = onlyOn.includes(id);
+    }
+    applyAll();
+  }
+
+  // Bind change handlers.
+  for (const id of ctlIds) {
+    const el = document.getElementById('t-' + id);
+    if (el) el.addEventListener('change', applyAll);
+  }
+  // Initial render.
+  applyAll();
+</script>
+</body>
+</html>

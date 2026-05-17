@@ -33,11 +33,22 @@ process, validates rules + skills + MCP end-to-end through a TDD eval
 suite with a bare-workspace negative control. Full story:
 [`PHASE1.md`](PHASE1.md).
 
-### Phase 2 — TBD (planned)
+### Phase 2 — MVP hardening (✓ done, 2026-05-17)
 
-Phase 2 is not yet scoped. The deferred backlog from Phase 1 (TDD
-backfill for adapter modules, workspace data isolation, per-user API
-keys, self-hosted Cursor runtime, SSO, tier-2 context-management
-evals, manifest enhancements) is enumerated in
-[`PHASE2.md`](PHASE2.md). A real Phase 2 starts when there's reason
-to take one of those items — or a coherent cluster — on as a phase.
+Backend test rigor + frontend operator-readiness, shipped as two
+slices: TDD backfill brought the adapter suite from 27 to 94
+deterministic tests (every source module covered by a `.spec.md`),
+and LibreChat was locked down to the MVP UI surface with NVIDIA
+branding overlaid via docker bind-mounts — zero LibreChat fork.
+Full story: [`PHASE2.md`](PHASE2.md).
+
+### Phase 3 — TBD (planned)
+
+Phase 3 inherits tier-2 context-management evals (deferred from
+Phase 2's original scope) plus the production-readiness backlog
+that's been carrying since Phase 1 (workspace data isolation,
+per-user / per-skill API keys, self-hosted Cursor runtime, SSO).
+Plus a handful of cosmetic fork items from Phase 2 Slice 2 (Files
+panel, Export menu shell, NVIDIA dark-theme). Full list of
+candidates: [`PHASE3.md`](PHASE3.md). A real Phase 3 starts when
+one item — or a coherent cluster — has user-pull.
