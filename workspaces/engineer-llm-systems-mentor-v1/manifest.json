@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "id": "engineer-llm-systems-mentor-v1",
+  "display_name": "LLM Systems Mentor",
+  "description": "Agentic engineer you can delegate LLM-serving and systems-efficiency questions to — grounded in CMU 11868 LLM Systems course materials.",
+  "owner": "yaoge",
+  "workspace_dir": "./repo",
+  "cursor_model": "gpt-5.5-extra-high-fast",
+  "mode": "ask"
+}

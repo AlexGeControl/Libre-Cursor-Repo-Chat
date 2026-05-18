@@ -4,7 +4,7 @@ import Database from "better-sqlite3";
 
 export interface ConvAgentRow {
   cursorAgentId: string;
-  skillId: string;
+  workspaceId: string;
   createdAt: number;
   lastUsedAt: number;
 }
@@ -38,7 +38,7 @@ export class ConvStore {
       CREATE TABLE IF NOT EXISTS conv_agents (
         conv_key TEXT PRIMARY KEY,
         cursor_agent_id TEXT NOT NULL,
-        skill_id TEXT NOT NULL,
+        workspace_id TEXT NOT NULL,
         created_at INTEGER NOT NULL,
         last_used_at INTEGER NOT NULL
       );
@@ -47,16 +47,16 @@ export class ConvStore {
     `);
 
     this.getStmt = this.db.prepare(
-      "SELECT cursor_agent_id AS cursorAgentId, skill_id AS skillId, " +
+      "SELECT cursor_agent_id AS cursorAgentId, workspace_id AS workspaceId, " +
         "created_at AS createdAt, last_used_at AS lastUsedAt " +
         "FROM conv_agents WHERE conv_key = ?",
     );
     this.putStmt = this.db.prepare(
-      "INSERT INTO conv_agents (conv_key, cursor_agent_id, skill_id, created_at, last_used_at) " +
+      "INSERT INTO conv_agents (conv_key, cursor_agent_id, workspace_id, created_at, last_used_at) " +
         "VALUES (?, ?, ?, ?, ?) " +
         "ON CONFLICT(conv_key) DO UPDATE SET " +
         "  cursor_agent_id = excluded.cursor_agent_id, " +
-        "  skill_id        = excluded.skill_id, " +
+        "  workspace_id    = excluded.workspace_id, " +
         "  last_used_at    = excluded.last_used_at",
     );
     this.touchStmt = this.db.prepare(
@@ -95,9 +95,9 @@ export class ConvStore {
     return row ?? null;
   }
 
-  put(convKey: string, cursorAgentId: string, skillId: string): void {
+  put(convKey: string, cursorAgentId: string, workspaceId: string): void {
     const now = Date.now();
-    this.putStmt.run(convKey, cursorAgentId, skillId, now, now);
+    this.putStmt.run(convKey, cursorAgentId, workspaceId, now, now);
   }
 
   touch(convKey: string): void {

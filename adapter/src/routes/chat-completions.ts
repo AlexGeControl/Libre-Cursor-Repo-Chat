@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 import { UnknownAgentError } from "@cursor/sdk";
 import type { Run, SDKAgent } from "@cursor/sdk";
-import type { Skill } from "../skills/manifest.ts";
+import type { Workspace } from "../workspaces/manifest.ts";
 import type { ConvStore } from "../state/conv-store.ts";
 import type { CursorAdapter } from "../cursor/cursor-adapter.ts";
 import { buildRehydrationPrompt } from "../cursor/rehydration.ts";
@@ -13,7 +13,7 @@ import {
 } from "../cursor/openai-translate.ts";
 
 interface Options {
-  skills: Skill[];
+  workspaces: Workspace[];
   convStore: ConvStore;
   cursorAdapter: CursorAdapter;
 }
@@ -44,8 +44,8 @@ export const chatCompletions: FastifyPluginAsync<Options> = async (app, opts) =>
     "/v1/chat/completions",
     async (req: FastifyRequest<{ Body: ChatCompletionsBody }>, reply: FastifyReply) => {
       const body = req.body;
-      const skill = opts.skills.find((s) => s.id === body?.model);
-      if (!skill) {
+      const workspace = opts.workspaces.find((w) => w.id === body?.model);
+      if (!workspace) {
         return reply.code(404).send({
           error: {
             message: `unknown model: ${body?.model}`,
@@ -72,7 +72,7 @@ export const chatCompletions: FastifyPluginAsync<Options> = async (app, opts) =>
       req.log.info(
         {
           convKey,
-          skill: skill.id,
+          workspace: workspace.id,
           messageCount: body.messages.length,
           stream: body.stream === true,
           latestPromptLen: promptText.length,
@@ -91,7 +91,7 @@ export const chatCompletions: FastifyPluginAsync<Options> = async (app, opts) =>
           : promptText;
 
       const { agent, run, mode } = await dispatch({
-        skill,
+        workspace,
         convKey,
         convStore: opts.convStore,
         cursorAdapter: opts.cursorAdapter,
@@ -103,13 +103,13 @@ export const chatCompletions: FastifyPluginAsync<Options> = async (app, opts) =>
       // Persist the agentId on first-create; touch on resume. Done
       // BEFORE the stream completes so a client disconnect mid-stream
       // doesn't lose the mapping.
-      if (mode === "created") opts.convStore.put(convKey, agent.agentId, skill.id);
+      if (mode === "created") opts.convStore.put(convKey, agent.agentId, workspace.id);
       else opts.convStore.touch(convKey);
 
       if (body.stream === true) {
-        return streamSSE({ reply, run, agent, id, created, model: skill.id, log: req.log });
+        return streamSSE({ reply, run, agent, id, created, model: workspace.id, log: req.log });
       }
-      return nonStreaming({ reply, run, agent, id, created, model: skill.id, log: req.log });
+      return nonStreaming({ reply, run, agent, id, created, model: workspace.id, log: req.log });
     },
   );
 };
@@ -128,7 +128,7 @@ type AgentDispatch = { agent: SDKAgent; run: Run; mode: "created" | "resumed" };
  * SQLite; integration-tested via FakeCursor.sendThrowsUnknown.
  */
 async function dispatch(args: {
-  skill: Skill;
+  workspace: Workspace;
   convKey: string;
   convStore: ConvStore;
   cursorAdapter: CursorAdapter;
@@ -136,22 +136,22 @@ async function dispatch(args: {
   createdPromptText: string;
   log: FastifyRequest["log"];
 }): Promise<AgentDispatch> {
-  const { skill, convKey, convStore, cursorAdapter, log } = args;
+  const { workspace, convKey, convStore, cursorAdapter, log } = args;
   const existing = convStore.get(convKey);
 
-  if (existing && existing.skillId !== skill.id) {
+  if (existing && existing.workspaceId !== workspace.id) {
     log.info(
-      { convKey, fromSkill: existing.skillId, toSkill: skill.id },
-      "skill changed for this convKey; creating fresh agent",
+      { convKey, fromWorkspace: existing.workspaceId, toWorkspace: workspace.id },
+      "workspace changed for this convKey; creating fresh agent",
     );
     convStore.delete(convKey);
   }
 
-  if (existing && existing.skillId === skill.id) {
+  if (existing && existing.workspaceId === workspace.id) {
     const resumed = await tryResumeAndSend({
       cursorAdapter,
       agentId: existing.cursorAgentId,
-      skill,
+      workspace,
       promptText: args.resumedPromptText,
       log,
       convKey,
@@ -167,8 +167,8 @@ async function dispatch(args: {
     }
   }
 
-  const agent = await cursorAdapter.create({ skill, convKey });
-  log.info({ convKey, cursorAgentId: agent.agentId, skill: skill.id }, "cursor agent created");
+  const agent = await cursorAdapter.create({ workspace, convKey });
+  log.info({ convKey, cursorAgentId: agent.agentId, workspace: workspace.id }, "cursor agent created");
   const run = await agent.send(args.createdPromptText);
   return { agent, run, mode: "created" };
 }
@@ -181,16 +181,16 @@ type ResumeAttempt =
 async function tryResumeAndSend(args: {
   cursorAdapter: CursorAdapter;
   agentId: string;
-  skill: Skill;
+  workspace: Workspace;
   promptText: string;
   convKey: string;
   log: FastifyRequest["log"];
 }): Promise<ResumeAttempt> {
   let agent: SDKAgent | undefined;
   try {
-    agent = await args.cursorAdapter.resume(args.agentId, { skill: args.skill });
+    agent = await args.cursorAdapter.resume(args.agentId, { workspace: args.workspace });
     args.log.info(
-      { convKey: args.convKey, cursorAgentId: agent.agentId, skill: args.skill.id },
+      { convKey: args.convKey, cursorAgentId: agent.agentId, workspace: args.workspace.id },
       "cursor agent resumed",
     );
     const run = await agent.send(args.promptText);

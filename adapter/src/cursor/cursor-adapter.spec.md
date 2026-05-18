@@ -31,7 +31,7 @@ exports (the only edit to the source file).
 ## Purpose
 
 `.cursor/mcp.json` declares MCP server integrations (e.g. the O'Reilly
-Books MCP used by `workspaces/context-mgmt-eval-v1/`). Two things the
+Books MCP used by `workspaces/eval-context-mgmt-configured-v1/`). Two things the
 Cursor SDK does NOT do for us, which this module covers:
 
 1. Auto-loading `mcp.json` from `cwd`. The SDK loads
@@ -146,9 +146,9 @@ the matching test.**
 - **Implementation:** [`src/cursor/cursor-adapter.ts`](./cursor-adapter.ts)
 - **Tests:** [`test/cursor/cursor-adapter.test.ts`](../../test/cursor/cursor-adapter.test.ts)
 - **Used by:** `sdkCursorAdapter.create` and `sdkCursorAdapter.resume`
-  in the same file — both invoke `loadMcpServers(skill.workspace_dir_abs)`
+  in the same file — both invoke `loadMcpServers(workspace.workspace_dir_abs)`
   and spread the result into the SDK options when defined.
-- **Reference workspace:** [`workspaces/context-mgmt-eval-v1/.cursor/mcp.json`](../../../workspaces/context-mgmt-eval-v1/.cursor/mcp.json)
+- **Reference workspace:** [`workspaces/eval-context-mgmt-configured-v1/.cursor/mcp.json`](../../../workspaces/eval-context-mgmt-configured-v1/.cursor/mcp.json)
   — the canonical MCP config using `${OREILLY_MCP_TOKEN}`.
 - **Background:** [`docs/PHASE1.md`](../../../docs/PHASE1.md) — "Project
   `settingSources` + explicit MCP loading" and "Slice — Tier-1

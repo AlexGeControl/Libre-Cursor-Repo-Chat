@@ -30,11 +30,11 @@ describe("ConvStore construction & schema", () => {
   it("C2: constructor creates the conv_agents table (put → get round-trip works)", () => {
     const store = new ConvStore(":memory:");
     try {
-      store.put("u:c1", "agent-1", "skill-A");
+      store.put("u:c1", "agent-1", "workspace-A");
       const row = store.get("u:c1");
       assert.ok(row, "row should be readable after put");
       assert.equal(row!.cursorAgentId, "agent-1");
-      assert.equal(row!.skillId, "skill-A");
+      assert.equal(row!.workspaceId, "workspace-A");
     } finally {
       store.close();
     }
@@ -60,7 +60,7 @@ describe("ConvStore construction & schema", () => {
     const path = join(dir, "conv.sqlite");
     try {
       const first = new ConvStore(path);
-      first.put("u:c1", "agent-1", "skill-A");
+      first.put("u:c1", "agent-1", "workspace-A");
       first.close();
 
       // Reopen — must not throw on CREATE TABLE / CREATE INDEX.
@@ -93,19 +93,19 @@ describe("ConvStore.get", () => {
   });
 
   it("G2: get on a non-existent key returns null even when other keys exist", () => {
-    store.put("u:present", "agent-1", "skill-A");
+    store.put("u:present", "agent-1", "workspace-A");
     assert.equal(store.get("u:absent"), null);
   });
 
   it("G3: get after put returns a ConvAgentRow with numeric timestamps", () => {
     const before = Date.now();
-    store.put("u:c1", "agent-1", "skill-A");
+    store.put("u:c1", "agent-1", "workspace-A");
     const after = Date.now();
 
     const row = store.get("u:c1");
     assert.ok(row, "row should exist");
     assert.equal(row!.cursorAgentId, "agent-1");
-    assert.equal(row!.skillId, "skill-A");
+    assert.equal(row!.workspaceId, "workspace-A");
     assert.equal(typeof row!.createdAt, "number");
     assert.equal(typeof row!.lastUsedAt, "number");
     assert.ok(
@@ -130,7 +130,7 @@ describe("ConvStore.put", () => {
   afterEach(() => store.close());
 
   it("P1: put on a fresh key sets createdAt === lastUsedAt", () => {
-    store.put("u:c1", "agent-1", "skill-A");
+    store.put("u:c1", "agent-1", "workspace-A");
     const row = store.get("u:c1");
     assert.ok(row);
     // Both timestamps are set from the same Date.now() call inside put.
@@ -141,8 +141,8 @@ describe("ConvStore.put", () => {
     );
   });
 
-  it("P2: put twice on the same convKey upserts — second wins on agentId/skillId/lastUsedAt, but createdAt is preserved from the first insert", async () => {
-    store.put("u:c1", "agent-1", "skill-A");
+  it("P2: put twice on the same convKey upserts — second wins on agentId/workspaceId/lastUsedAt, but createdAt is preserved from the first insert", async () => {
+    store.put("u:c1", "agent-1", "workspace-A");
     const first = store.get("u:c1");
     assert.ok(first);
     const firstCreatedAt = first!.createdAt;
@@ -151,12 +151,12 @@ describe("ConvStore.put", () => {
     // delay is enough on every supported platform.
     await new Promise((r) => setTimeout(r, 2));
 
-    store.put("u:c1", "agent-2", "skill-B");
+    store.put("u:c1", "agent-2", "workspace-B");
     const second = store.get("u:c1");
     assert.ok(second);
 
     assert.equal(second!.cursorAgentId, "agent-2", "agentId updated");
-    assert.equal(second!.skillId, "skill-B", "skillId updated");
+    assert.equal(second!.workspaceId, "workspace-B", "workspaceId updated");
     assert.equal(
       second!.createdAt,
       firstCreatedAt,
@@ -169,16 +169,16 @@ describe("ConvStore.put", () => {
   });
 
   it("P3: put on different keys keeps rows independent", () => {
-    store.put("u:c1", "agent-1", "skill-A");
-    store.put("u:c2", "agent-2", "skill-B");
+    store.put("u:c1", "agent-1", "workspace-A");
+    store.put("u:c2", "agent-2", "workspace-B");
 
     const r1 = store.get("u:c1");
     const r2 = store.get("u:c2");
     assert.ok(r1 && r2);
     assert.equal(r1!.cursorAgentId, "agent-1");
-    assert.equal(r1!.skillId, "skill-A");
+    assert.equal(r1!.workspaceId, "workspace-A");
     assert.equal(r2!.cursorAgentId, "agent-2");
-    assert.equal(r2!.skillId, "skill-B");
+    assert.equal(r2!.workspaceId, "workspace-B");
   });
 });
 
@@ -192,8 +192,8 @@ describe("ConvStore.touch", () => {
   });
   afterEach(() => store.close());
 
-  it("T1: touch updates lastUsedAt only; createdAt/agentId/skillId unchanged", async () => {
-    store.put("u:c1", "agent-1", "skill-A");
+  it("T1: touch updates lastUsedAt only; createdAt/agentId/workspaceId unchanged", async () => {
+    store.put("u:c1", "agent-1", "workspace-A");
     const before = store.get("u:c1");
     assert.ok(before);
 
@@ -203,7 +203,7 @@ describe("ConvStore.touch", () => {
     const after = store.get("u:c1");
     assert.ok(after);
     assert.equal(after!.cursorAgentId, before!.cursorAgentId);
-    assert.equal(after!.skillId, before!.skillId);
+    assert.equal(after!.workspaceId, before!.workspaceId);
     assert.equal(after!.createdAt, before!.createdAt, "createdAt unchanged");
     assert.ok(
       after!.lastUsedAt >= before!.lastUsedAt,
@@ -228,7 +228,7 @@ describe("ConvStore.delete", () => {
   afterEach(() => store.close());
 
   it("D1: delete removes the row", () => {
-    store.put("u:c1", "agent-1", "skill-A");
+    store.put("u:c1", "agent-1", "workspace-A");
     assert.ok(store.get("u:c1"));
     store.delete("u:c1");
     assert.equal(store.get("u:c1"), null);
@@ -239,8 +239,8 @@ describe("ConvStore.delete", () => {
   });
 
   it("D3: delete leaves sibling rows intact", () => {
-    store.put("u:c1", "agent-1", "skill-A");
-    store.put("u:c2", "agent-2", "skill-B");
+    store.put("u:c1", "agent-1", "workspace-A");
+    store.put("u:c2", "agent-2", "workspace-B");
     store.delete("u:c1");
     assert.equal(store.get("u:c1"), null);
     const r2 = store.get("u:c2");

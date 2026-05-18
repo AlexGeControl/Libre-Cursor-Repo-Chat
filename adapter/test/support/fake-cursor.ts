@@ -7,8 +7,8 @@ import type {
 } from "../../src/cursor/cursor-adapter.ts";
 
 export type FakeCall =
-  | { type: "create"; agentId: string; skillId: string; convKey: string }
-  | { type: "resume"; agentId: string; skillId: string }
+  | { type: "create"; agentId: string; workspaceId: string; convKey: string }
+  | { type: "resume"; agentId: string; workspaceId: string }
   | { type: "send"; agentId: string; text: string }
   | { type: "dispose"; agentId: string };
 
@@ -45,14 +45,14 @@ export class FakeCursor implements CursorAdapter {
     this.calls.push({
       type: "create",
       agentId,
-      skillId: args.skill.id,
+      workspaceId: args.workspace.id,
       convKey: args.convKey,
     });
     return this.buildAgent(agentId);
   }
 
   async resume(agentId: string, args: ResumeArgs): Promise<SDKAgent> {
-    this.calls.push({ type: "resume", agentId, skillId: args.skill.id });
+    this.calls.push({ type: "resume", agentId, workspaceId: args.workspace.id });
     if (this.resumeThrowsUnknown.has(agentId)) {
       throw new UnknownAgentError(`fake: unknown agent ${agentId}`);
     }

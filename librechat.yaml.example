@@ -40,7 +40,7 @@ interface:
   # time-of-day greeting + user name ("Good Evening, Yao"). Supports the
   # `{{user.name}}` template token (no markdown, no other tokens).
   # Source: config.ts:907; render: client/src/components/Chat/Landing.tsx:67-138.
-  # customWelcome: "Welcome to Cursor Workspaces, {{user.name}}. Pick a workspace from the model selector to chat with that team's distilled know-how."
+  # customWelcome: "Welcome to Agentic Engineers, {{user.name}}. Pick an agentic engineer from the model selector and delegate the rote farm work — they're stocked with the originating engineer's rules, skills, and repo context."
 
   # ─── sidebar panels ────────────────────────────────────────────────────────
 
@@ -173,7 +173,7 @@ interface:
 
 endpoints:
   custom:
-    - name: "Cursor Workspaces"
+    - name: "Agentic Engineers"
       # `apiKey` is required by the upstream schema but ignored by our
       # adapter — workspace access is controlled by the manifest registry.
       apiKey: "unused"
@@ -196,9 +196,9 @@ endpoints:
         # Worth keeping at least one valid model id here so a broken adapter
         # doesn't leave the selector empty on boot.
         default:
-          - "cmu-genai-v1"
-          - "cmu-llm-systems-v1"
-          - "cursor-cookbook-v1"
+          - "engineer-genai-mentor-v1"
+          - "engineer-llm-systems-mentor-v1"
+          - "engineer-cursor-sdk-guide-v1"
         # Hits `<baseURL>/v1/models` on boot and merges into the list.
         fetch: true
 
@@ -206,7 +206,7 @@ endpoints:
       # "summarize this thread in 5 words" prompt to `titleModel`. Known mild
       # contamination — see docs/PHASE1.md "title-gen contamination".
       titleConvo: true
-      titleModel: "cmu-genai-v1"
+      titleModel: "engineer-genai-mentor-v1"
 
       # Strip named fields from the outbound request body before the HTTP
       # call. Smoking-gun consume site:

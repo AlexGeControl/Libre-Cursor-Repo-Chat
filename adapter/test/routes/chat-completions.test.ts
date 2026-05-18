@@ -9,7 +9,7 @@ import { chatCompletions } from "../../src/routes/chat-completions.ts";
 import { ConvStore } from "../../src/state/conv-store.ts";
 import { FakeCursor } from "../support/fake-cursor.ts";
 import {
-  makeSkill,
+  makeWorkspace,
   userMsg,
   assistantMsg,
   type FakeChatMessage,
@@ -34,7 +34,7 @@ function makeStreamlessBody(opts: {
   user?: string;
 }) {
   return {
-    model: opts.model ?? "test-skill-v1",
+    model: opts.model ?? "test-workspace-v1",
     messages: opts.messages,
     stream: false,
     user: opts.user ?? "user-1",
@@ -44,11 +44,11 @@ function makeStreamlessBody(opts: {
 async function buildApp(args: {
   cursor: FakeCursor;
   store: ConvStore;
-  skills?: ReturnType<typeof makeSkill>[];
+  workspaces?: ReturnType<typeof makeWorkspace>[];
 }): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
   await app.register(chatCompletions, {
-    skills: args.skills ?? [makeSkill()],
+    workspaces: args.workspaces ?? [makeWorkspace()],
     convStore: args.store,
     cursorAdapter: args.cursor,
   });
@@ -88,7 +88,7 @@ describe("POST /v1/chat/completions — acquireAgent scenarios", () => {
 
       const row = store.get("u1:conv-A");
       assert.ok(row, "convKey mapping must be persisted");
-      assert.equal(row.skillId, "test-skill-v1");
+      assert.equal(row.workspaceId, "test-workspace-v1");
       assert.match(row.cursorAgentId, /^fake-agent-/);
     } finally {
       await app.close();
@@ -138,7 +138,7 @@ describe("POST /v1/chat/completions — acquireAgent scenarios", () => {
 
   // ---------- C ----------
   it("C: existing fresh mapping → resume + send(latest), no rehydration even when history is present", async () => {
-    store.put("u1:conv-C", "previously-saved-agent-id", "test-skill-v1");
+    store.put("u1:conv-C", "previously-saved-agent-id", "test-workspace-v1");
     const app = await buildApp({ cursor, store });
     try {
       const messages = [
@@ -171,7 +171,7 @@ describe("POST /v1/chat/completions — acquireAgent scenarios", () => {
   // SDK 1.0.7 resume returns a stub synchronously; "agent not found"
   // fires on the FIRST send. This test pins that behavior.
   it("D': stale mapping (UnknownAgentError on send, not resume) + history → delete + create + send(rehydration)", async () => {
-    store.put("u1:conv-Dp", "stale-on-send-agent", "test-skill-v1");
+    store.put("u1:conv-Dp", "stale-on-send-agent", "test-workspace-v1");
     cursor.sendThrowsUnknown.add("stale-on-send-agent");
     const app = await buildApp({ cursor, store });
     try {
@@ -215,7 +215,7 @@ describe("POST /v1/chat/completions — acquireAgent scenarios", () => {
 
   // ---------- D ----------
   it("D: stale mapping (UnknownAgentError on resume) + history → delete + create + send(rehydration)", async () => {
-    store.put("u1:conv-D", "stale-agent", "test-skill-v1");
+    store.put("u1:conv-D", "stale-agent", "test-workspace-v1");
     cursor.resumeThrowsUnknown.add("stale-agent");
     const app = await buildApp({ cursor, store });
     try {
@@ -251,7 +251,7 @@ describe("POST /v1/chat/completions — acquireAgent scenarios", () => {
 
   // ---------- E ----------
   it("E: non-UnknownAgentError on resume propagates as 5xx; mapping is NOT silently deleted", async () => {
-    store.put("u1:conv-E", "flaky-agent", "test-skill-v1");
+    store.put("u1:conv-E", "flaky-agent", "test-workspace-v1");
     cursor.resumeThrowsOther.set("flaky-agent", new Error("ECONNRESET"));
     const app = await buildApp({ cursor, store });
     try {
@@ -275,15 +275,15 @@ describe("POST /v1/chat/completions — acquireAgent scenarios", () => {
   });
 
   // ---------- F ----------
-  it("F: skill mismatch with non-empty history → delete old + create for new skill + rehydrate", async () => {
-    const skillA = makeSkill({ id: "skill-a-v1", display_name: "A" });
-    const skillB = makeSkill({ id: "skill-b-v1", display_name: "B" });
-    store.put("u1:conv-F", "agent-on-skill-a", skillA.id);
+  it("F: workspace mismatch with non-empty history → delete old + create for new workspace + rehydrate", async () => {
+    const workspaceA = makeWorkspace({ id: "workspace-a-v1", display_name: "A" });
+    const workspaceB = makeWorkspace({ id: "workspace-b-v1", display_name: "B" });
+    store.put("u1:conv-F", "agent-on-workspace-a", workspaceA.id);
 
-    const app = await buildApp({ cursor, store, skills: [skillA, skillB] });
+    const app = await buildApp({ cursor, store, workspaces: [workspaceA, workspaceB] });
     try {
       const messages = [
-        userMsg("Hello on skill A."),
+        userMsg("Hello on workspace A."),
         assistantMsg("Hi, I'm A."),
         userMsg("Now answer me as if you are B."),
       ];
@@ -291,20 +291,20 @@ describe("POST /v1/chat/completions — acquireAgent scenarios", () => {
         method: "POST",
         url: "/v1/chat/completions",
         headers: { "x-librechat-conversation-id": "conv-F" },
-        payload: makeStreamlessBody({ model: skillB.id, messages, user: "u1" }),
+        payload: makeStreamlessBody({ model: workspaceB.id, messages, user: "u1" }),
       });
 
       assert.equal(resp.statusCode, 200);
-      // No resume attempt — skill mismatch is detected before we try.
+      // No resume attempt — workspace mismatch is detected before we try.
       assert.deepEqual(cursor.callTypes(), ["create", "send", "dispose"]);
       const created = cursor.calls.find((c) => c.type === "create");
-      assert.equal(created && "skillId" in created && created.skillId, skillB.id);
+      assert.equal(created && "workspaceId" in created && created.workspaceId, workspaceB.id);
       const sent = cursor.lastSendText() ?? "";
       assert.match(sent, /=== Prior conversation ===/);
 
       const row = store.get("u1:conv-F");
-      assert.equal(row?.skillId, skillB.id);
-      assert.notEqual(row?.cursorAgentId, "agent-on-skill-a");
+      assert.equal(row?.workspaceId, workspaceB.id);
+      assert.notEqual(row?.cursorAgentId, "agent-on-workspace-a");
     } finally {
       await app.close();
       cleanup();

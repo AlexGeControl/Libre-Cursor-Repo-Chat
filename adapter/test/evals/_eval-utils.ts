@@ -6,19 +6,19 @@
  * Evals POST to a live adapter on the host and assert on the assistant
  * text in the OpenAI-shape response. They are inherently slower and
  * softer than unit tests (real LLM, real Cursor, sometimes real
- * external services). See workspaces/context-mgmt-eval-v1/eval.spec.md
+ * external services). See workspaces/eval-context-mgmt-configured-v1/eval.spec.md
  * for the spec and `adapter/test/README.md` for the eval discipline.
  */
 
 const ADAPTER_URL = process.env.ADAPTER_URL ?? "http://127.0.0.1:8080";
-const DEFAULT_SKILL = "context-mgmt-eval-v1";
+const DEFAULT_WORKSPACE = "eval-context-mgmt-configured-v1";
 const DEFAULT_USER = "eval-bot";
 
 export interface AskOptions {
   /** Override the adapter URL for a single call. */
   adapterUrl?: string;
   /** Override the workspace id. Defaults to the context-mgmt-eval workspace. */
-  skill?: string;
+  workspace?: string;
   /** Provide a stable convId, or let one be generated per call. */
   convId?: string;
   /** Override the user id (rarely needed). */
@@ -34,7 +34,7 @@ export interface AskResult {
 
 export async function askEval(prompt: string, opts: AskOptions = {}): Promise<AskResult> {
   const adapterUrl = opts.adapterUrl ?? ADAPTER_URL;
-  const skill = opts.skill ?? DEFAULT_SKILL;
+  const workspace = opts.workspace ?? DEFAULT_WORKSPACE;
   const convId = opts.convId ?? `eval-${Math.random().toString(36).slice(2, 10)}`;
   const user = opts.user ?? DEFAULT_USER;
   const timeoutMs = opts.timeoutMs ?? 120_000;
@@ -50,7 +50,7 @@ export async function askEval(prompt: string, opts: AskOptions = {}): Promise<As
         "X-LibreChat-Conversation-Id": convId,
       },
       body: JSON.stringify({
-        model: skill,
+        model: workspace,
         stream: false,
         user,
         messages: [{ role: "user", content: prompt }],

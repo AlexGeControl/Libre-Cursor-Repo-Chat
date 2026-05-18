@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Agent } from "@cursor/sdk";
 import type { McpServerConfig, SDKAgent } from "@cursor/sdk";
-import type { Skill } from "../skills/manifest.ts";
+import type { Workspace } from "../workspaces/manifest.ts";
 
 /**
  * Boundary between the route handler and the Cursor SDK. Production
@@ -16,13 +16,13 @@ import type { Skill } from "../skills/manifest.ts";
  * via a separate import in the route.
  */
 export interface CreateArgs {
-  skill: Skill;
+  workspace: Workspace;
   /** Used as the agent's display name on Cursor's side for traceability. */
   convKey: string;
 }
 
 export interface ResumeArgs {
-  skill: Skill;
+  workspace: Workspace;
 }
 
 export interface CursorAdapter {
@@ -34,8 +34,8 @@ export interface CursorAdapter {
 // .cursor/rules and .cursor/skills actually load. Without it the SDK
 // boots a bare local agent that ignores those configs — silently
 // breaking rules and skills. Discovered while bringing up the
-// context-mgmt-eval-v1 evals; see
-// workspaces/context-mgmt-eval-v1/eval.spec.md for the post-mortem.
+// eval-context-mgmt-configured-v1 evals; see
+// workspaces/eval-context-mgmt-configured-v1/eval.spec.md for the post-mortem.
 const SETTING_SOURCES = ["project"] as const;
 
 /**
@@ -75,27 +75,27 @@ export function expandEnv(value: unknown): unknown {
 }
 
 export const sdkCursorAdapter: CursorAdapter = {
-  async create({ skill, convKey }) {
-    const mcpServers = loadMcpServers(skill.workspace_dir_abs);
+  async create({ workspace, convKey }) {
+    const mcpServers = loadMcpServers(workspace.workspace_dir_abs);
     return await Agent.create({
       apiKey: process.env.CURSOR_API_KEY,
-      name: `${skill.id} ${convKey}`,
-      model: { id: skill.cursor_model },
+      name: `${workspace.id} ${convKey}`,
+      model: { id: workspace.cursor_model },
       local: {
-        cwd: skill.workspace_dir_abs,
+        cwd: workspace.workspace_dir_abs,
         settingSources: [...SETTING_SOURCES],
       },
       ...(mcpServers ? { mcpServers } : {}),
     });
   },
 
-  async resume(agentId, { skill }) {
-    const mcpServers = loadMcpServers(skill.workspace_dir_abs);
+  async resume(agentId, { workspace }) {
+    const mcpServers = loadMcpServers(workspace.workspace_dir_abs);
     return await Agent.resume(agentId, {
       apiKey: process.env.CURSOR_API_KEY,
-      model: { id: skill.cursor_model },
+      model: { id: workspace.cursor_model },
       local: {
-        cwd: skill.workspace_dir_abs,
+        cwd: workspace.workspace_dir_abs,
         settingSources: [...SETTING_SOURCES],
       },
       ...(mcpServers ? { mcpServers } : {}),

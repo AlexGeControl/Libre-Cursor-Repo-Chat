@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "id": "engineer-cursor-sdk-guide-v1",
+  "display_name": "Cursor SDK Guide",
+  "description": "Agentic engineer that knows the Cursor SDK cookbook end-to-end — quickstart, app-builder, coding-agent-cli, agent-kanban, dag-task-runner. Delegate SDK how-to questions here.",
+  "owner": "yaoge",
+  "workspace_dir": "./repo",
+  "cursor_model": "gpt-5.5-extra-high-fast",
+  "mode": "ask"
+}

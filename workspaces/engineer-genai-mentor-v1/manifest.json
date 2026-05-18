@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "id": "engineer-genai-mentor-v1",
+  "display_name": "GenAI Fundamentals Mentor",
+  "description": "Agentic engineer you can delegate generative-AI fundamentals questions to — grounded in CMU 10-X23 lecture notes and PyTorch-for-deep-learning assignments.",
+  "owner": "yaoge",
+  "workspace_dir": "./repo",
+  "cursor_model": "gpt-5.5-extra-high-fast",
+  "mode": "ask"
+}

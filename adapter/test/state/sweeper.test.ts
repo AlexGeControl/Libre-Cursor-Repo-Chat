@@ -34,10 +34,10 @@ function insertRowWithLastUsed(
   store: ConvStore,
   convKey: string,
   cursorAgentId: string,
-  skillId: string,
+  workspaceId: string,
   lastUsedAt: number,
 ): void {
-  store.put(convKey, cursorAgentId, skillId);
+  store.put(convKey, cursorAgentId, workspaceId);
   // Bracket access bypasses the `private` visibility check — test-only
   // backdoor to set a specific last_used_at. Production code never
   // mutates this column directly outside ConvStore's API.
@@ -66,8 +66,8 @@ describe("ConvStore.deleteStale", () => {
 
   it("S2: all rows fresh → returns [], all rows remain", () => {
     const now = 10_000;
-    insertRowWithLastUsed(store, "u:c1", "agent-1", "skill-A", now);
-    insertRowWithLastUsed(store, "u:c2", "agent-2", "skill-A", now + 1);
+    insertRowWithLastUsed(store, "u:c1", "agent-1", "workspace-A", now);
+    insertRowWithLastUsed(store, "u:c2", "agent-2", "workspace-A", now + 1);
 
     const result = store.deleteStale(now); // strict less-than → nothing
     assert.deepEqual(result, []);
@@ -76,8 +76,8 @@ describe("ConvStore.deleteStale", () => {
   });
 
   it("S3: all rows stale → returns every key, table empty after", () => {
-    insertRowWithLastUsed(store, "u:c1", "agent-1", "skill-A", 100);
-    insertRowWithLastUsed(store, "u:c2", "agent-2", "skill-A", 200);
+    insertRowWithLastUsed(store, "u:c1", "agent-1", "workspace-A", 100);
+    insertRowWithLastUsed(store, "u:c2", "agent-2", "workspace-A", 200);
 
     const result = store.deleteStale(1_000);
     assert.deepEqual(result, ["u:c1", "u:c2"]); // ascending last_used_at
@@ -86,9 +86,9 @@ describe("ConvStore.deleteStale", () => {
   });
 
   it("S4: mix → only stale convKeys deleted, fresh untouched", () => {
-    insertRowWithLastUsed(store, "u:stale-old", "a-old", "skill-A", 100);
-    insertRowWithLastUsed(store, "u:fresh-new", "a-new", "skill-A", 5_000);
-    insertRowWithLastUsed(store, "u:stale-mid", "a-mid", "skill-A", 500);
+    insertRowWithLastUsed(store, "u:stale-old", "a-old", "workspace-A", 100);
+    insertRowWithLastUsed(store, "u:fresh-new", "a-new", "workspace-A", 5_000);
+    insertRowWithLastUsed(store, "u:stale-mid", "a-mid", "workspace-A", 500);
 
     const result = store.deleteStale(1_000);
     assert.deepEqual(result, ["u:stale-old", "u:stale-mid"]);
@@ -98,16 +98,16 @@ describe("ConvStore.deleteStale", () => {
   });
 
   it("S5: boundary — row with last_used_at === beforeMs is NOT deleted (strict less-than)", () => {
-    insertRowWithLastUsed(store, "u:on-boundary", "agent-b", "skill-A", 1_000);
+    insertRowWithLastUsed(store, "u:on-boundary", "agent-b", "workspace-A", 1_000);
     const result = store.deleteStale(1_000);
     assert.deepEqual(result, []);
     assert.ok(store.get("u:on-boundary"));
   });
 
   it("S6: multiple stale rows returned in ascending last_used_at order", () => {
-    insertRowWithLastUsed(store, "u:second", "agent-2", "skill-A", 200);
-    insertRowWithLastUsed(store, "u:first", "agent-1", "skill-A", 100);
-    insertRowWithLastUsed(store, "u:third", "agent-3", "skill-A", 300);
+    insertRowWithLastUsed(store, "u:second", "agent-2", "workspace-A", 200);
+    insertRowWithLastUsed(store, "u:first", "agent-1", "workspace-A", 100);
+    insertRowWithLastUsed(store, "u:third", "agent-3", "workspace-A", 300);
 
     const result = store.deleteStale(1_000);
     assert.deepEqual(result, ["u:first", "u:second", "u:third"]);
@@ -143,8 +143,8 @@ describe("startIdleSweeper", () => {
   });
 
   it("W2: sweepNow with controlled now → deletes only rows older than now - ttlMs", () => {
-    insertRowWithLastUsed(store, "u:old", "a-old", "skill-A", 500);
-    insertRowWithLastUsed(store, "u:fresh", "a-fresh", "skill-A", 950);
+    insertRowWithLastUsed(store, "u:old", "a-old", "workspace-A", 500);
+    insertRowWithLastUsed(store, "u:fresh", "a-fresh", "workspace-A", 950);
 
     const sweeper = startIdleSweeper({
       store,
@@ -164,7 +164,7 @@ describe("startIdleSweeper", () => {
 
   it("W3: timer fires after intervalMs → sweep runs without manual invocation", () => {
     mock.timers.enable({ apis: ["setInterval"], now: 0 });
-    insertRowWithLastUsed(store, "u:old", "a-old", "skill-A", -10_000);
+    insertRowWithLastUsed(store, "u:old", "a-old", "workspace-A", -10_000);
 
     let currentNow = 0;
     const sweeper = startIdleSweeper({

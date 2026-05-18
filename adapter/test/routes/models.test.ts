@@ -4,13 +4,13 @@ import assert from "node:assert/strict";
 import Fastify, { type FastifyInstance } from "fastify";
 
 import { models } from "../../src/routes/models.ts";
-import { makeSkill } from "../support/fixtures.ts";
+import { makeWorkspace } from "../support/fixtures.ts";
 
 /**
  * Integration tests for GET /v1/models.
  *
  * What's real here: the Fastify route registration, the JSON response
- * serialization, and the projection from Skill[] to the OpenAI model
+ * serialization, and the projection from Workspace[] to the OpenAI model
  * list envelope.
  *
  * Nothing is faked — the route has no external dependencies. Each
@@ -18,15 +18,15 @@ import { makeSkill } from "../support/fixtures.ts";
  * state leaks between cases.
  */
 
-async function buildApp(skills: ReturnType<typeof makeSkill>[]): Promise<FastifyInstance> {
+async function buildApp(workspaces: ReturnType<typeof makeWorkspace>[]): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
-  await app.register(models, { skills });
+  await app.register(models, { workspaces });
   return app;
 }
 
 describe("GET /v1/models", () => {
   // ---------- 1 ----------
-  it("1: empty skills array → 200 with envelope { object: 'list', data: [] }", async (t) => {
+  it("1: empty workspaces array → 200 with envelope { object: 'list', data: [] }", async (t) => {
     const app = await buildApp([]);
     t.after(() => app.close());
 
@@ -37,13 +37,13 @@ describe("GET /v1/models", () => {
   });
 
   // ---------- 2 ----------
-  it("2: one skill → exact OpenAI model-item field shape", async (t) => {
-    const skill = makeSkill({
+  it("2: one workspace → exact OpenAI model-item field shape", async (t) => {
+    const workspace = makeWorkspace({
       id: "hw-test-gen-v1",
       display_name: "HW Test Gen",
       description: "Generates SystemVerilog stimuli.",
     });
-    const app = await buildApp([skill]);
+    const app = await buildApp([workspace]);
     t.after(() => app.close());
 
     const resp = await app.inject({ method: "GET", url: "/v1/models" });
@@ -65,14 +65,14 @@ describe("GET /v1/models", () => {
   });
 
   // ---------- 3 ----------
-  it("3: multiple skills → caller-given order is preserved verbatim (route does not re-sort)", async (t) => {
+  it("3: multiple workspaces → caller-given order is preserved verbatim (route does not re-sort)", async (t) => {
     // Intentionally not alphabetical to prove the route does not sort.
-    const skills = [
-      makeSkill({ id: "zeta-v1", display_name: "Zeta", description: "z" }),
-      makeSkill({ id: "alpha-v1", display_name: "Alpha", description: "a" }),
-      makeSkill({ id: "mike-v1", display_name: "Mike", description: "m" }),
+    const workspaces = [
+      makeWorkspace({ id: "zeta-v1", display_name: "Zeta", description: "z" }),
+      makeWorkspace({ id: "alpha-v1", display_name: "Alpha", description: "a" }),
+      makeWorkspace({ id: "mike-v1", display_name: "Mike", description: "m" }),
     ];
-    const app = await buildApp(skills);
+    const app = await buildApp(workspaces);
     t.after(() => app.close());
 
     const resp = await app.inject({ method: "GET", url: "/v1/models" });
@@ -90,7 +90,7 @@ describe("GET /v1/models", () => {
 
   // ---------- 4 ----------
   it("4: Content-Type is application/json", async (t) => {
-    const app = await buildApp([makeSkill()]);
+    const app = await buildApp([makeWorkspace()]);
     t.after(() => app.close());
 
     const resp = await app.inject({ method: "GET", url: "/v1/models" });
@@ -102,11 +102,11 @@ describe("GET /v1/models", () => {
   });
 
   // ---------- 5 ----------
-  it("5: only contract fields are projected; Skill-internal fields do not leak", async (t) => {
-    // makeSkill() includes workspace_dir, workspace_dir_abs, manifest_path,
+  it("5: only contract fields are projected; Workspace-internal fields do not leak", async (t) => {
+    // makeWorkspace() includes workspace_dir, workspace_dir_abs, manifest_path,
     // cursor_model, owner, mode, schema_version — none of these should
     // surface in the OpenAI response.
-    const skill = makeSkill({
+    const workspace = makeWorkspace({
       id: "secret-paths-v1",
       display_name: "Paths Test",
       description: "Verifies field projection.",
@@ -114,7 +114,7 @@ describe("GET /v1/models", () => {
       manifest_path: "/private/should/not/leak/manifest.json",
       owner: "internal-team",
     });
-    const app = await buildApp([skill]);
+    const app = await buildApp([workspace]);
     t.after(() => app.close());
 
     const resp = await app.inject({ method: "GET", url: "/v1/models" });

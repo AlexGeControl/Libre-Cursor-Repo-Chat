@@ -1,9 +1,9 @@
 [submodule "workspaces/cmu-genai-v1/repo"]
-	path = workspaces/cmu-genai-v1/repo
+	path = workspaces/engineer-genai-mentor-v1/repo
 	url = git@github.com:AlexGeControl/10-X23-Generative-AI.git
 [submodule "workspaces/cmu-llm-systems-v1/repo"]
-	path = workspaces/cmu-llm-systems-v1/repo
+	path = workspaces/engineer-llm-systems-mentor-v1/repo
 	url = git@github.com:AlexGeControl/11868-LLM-Systems.git
 [submodule "workspaces/cursor-cookbook-v1/repo"]
-	path = workspaces/cursor-cookbook-v1/repo
+	path = workspaces/engineer-cursor-sdk-guide-v1/repo
 	url = org-126759922@github.com:cursor/cookbook.git

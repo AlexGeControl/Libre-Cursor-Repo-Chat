@@ -1,12 +1,16 @@
 # Cursor-as-a-Service — Project Bootstrap
 
-> **Status note (2026-05-17):** This is the original kickoff document.
-> **Phases 1 and 2 are done**; the system runs as a Docker-compose
-> stack with our own Fastify + `@cursor/sdk@1.0.7` adapter (not the
-> `cursor-api-proxy` referenced in §3 below), the LibreChat UI is
-> locked down to the MVP surface with NVIDIA branding overlaid via
-> docker bind-mounts, and the adapter has 94 deterministic tests
-> backing six co-located `.spec.md` contracts. The live plan is in
+> **Status note (2026-05-18):** This is the original kickoff document.
+> **Phases 1 and 2 are done, and Phase 3 Slice 1 (the re-orientation
+> from "Cursor Skill Workspace" to "Agentic Engineer") has landed**;
+> the system runs as a Docker-compose stack with our own Fastify +
+> `@cursor/sdk@1.0.7` adapter (not the `cursor-api-proxy` referenced
+> in §3 below), the LibreChat UI is locked down to the MVP surface
+> with NVIDIA branding overlaid via docker bind-mounts, the adapter
+> has 94 deterministic tests backing eight co-located `.spec.md`
+> contracts, and internal code, workspace ids, and the user-facing
+> endpoint label all read in the "Agentic Engineer" register. The
+> live plan is in
 > [`docs/PLAN.md`](docs/PLAN.md), the current architecture is in
 > [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), and the Phase 3
 > handoff with bootstrap instructions for the next session lives in
@@ -25,14 +29,20 @@
 
 ## 1. Mission
 
-Build an internal web service that lets NVIDIA HW infra engineers deploy
+Build an internal web service that lets NVIDIA HW infra engineers turn
 their **Cursor workspaces** (distilled know-how for test generation and
-result analysis) as **multi-user chat services**, so the team can scale
-per-engineer expertise across the org.
+result analysis) into **agentic engineers** — teammate personas any
+authorized engineer can delegate rote farm work to, scaling per-engineer
+expertise across the org.
 
-Each deployed workspace becomes a "skill" that any authorized engineer can
-chat with through a browser — same UX as ChatGPT, backed by a Cursor agent
-running with the original engineer's `.cursor/` config and target repo.
+Each deployed workspace becomes an **agentic engineer** — a Cursor
+agent with rules + skills + MCP + repo context, addressable through a
+browser-based chat the same way you'd ping a coworker. The framing is
+*delegate, not replace*: the engineer who built the workspace is still
+the source of truth; the agentic engineer just handles the rote work
+on their behalf at scale. See
+[`docs/AGENTIC-ENGINEER.md`](docs/AGENTIC-ENGINEER.md) for the
+one-page explainer.
 
 ## 2. Background
 

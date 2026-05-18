@@ -26,7 +26,7 @@ by Redis without touching the call sites.
 ```ts
 interface ConvAgentRow {
   cursorAgentId: string;
-  skillId: string;
+  workspaceId: string;
   createdAt: number;     // ms since epoch, set on first put
   lastUsedAt: number;    // ms since epoch, updated by put/touch
 }
@@ -34,7 +34,7 @@ interface ConvAgentRow {
 class ConvStore {
   constructor(path: string);            // ":memory:" or filesystem path
   get(convKey: string): ConvAgentRow | null;
-  put(convKey: string, cursorAgentId: string, skillId: string): void;
+  put(convKey: string, cursorAgentId: string, workspaceId: string): void;
   touch(convKey: string): void;
   delete(convKey: string): void;
   deleteStale(beforeMs: number): string[];  // see sweeper.spec.md
@@ -55,7 +55,7 @@ class ConvStore {
 - `conv_key` is the primary key. `put` is an upsert; `created_at`
   is set only on first insert and preserved across subsequent
   `put`s for the same key (see `ON CONFLICT(conv_key) DO UPDATE SET`
-  clause — it updates `cursor_agent_id`, `skill_id`, and
+  clause — it updates `cursor_agent_id`, `workspace_id`, and
   `last_used_at` but NOT `created_at`).
 - `put` sets `created_at` and `last_used_at` to the same `Date.now()`
   on first insert.
@@ -92,21 +92,21 @@ matching test.**
 |---|----------|----------|
 | G1 | `get` on empty store | returns `null` (not `undefined`) |
 | G2 | `get` on a key that does not exist (but other keys do) | returns `null` |
-| G3 | `get` after `put` | returns a `ConvAgentRow` with the inserted `cursorAgentId`, `skillId`, and numeric `createdAt`/`lastUsedAt` |
+| G3 | `get` after `put` | returns a `ConvAgentRow` with the inserted `cursorAgentId`, `workspaceId`, and numeric `createdAt`/`lastUsedAt` |
 
 ### `put`
 
 | # | Scenario | Expected |
 |---|----------|----------|
 | P1 | `put` on a fresh key | row exists; `createdAt === lastUsedAt` (both set to `Date.now()` at insert time) |
-| P2 | `put` twice on the same `convKey` (upsert) | second `put` wins on `cursorAgentId`, `skillId`, and `lastUsedAt`; `createdAt` is preserved from the FIRST insert |
+| P2 | `put` twice on the same `convKey` (upsert) | second `put` wins on `cursorAgentId`, `workspaceId`, and `lastUsedAt`; `createdAt` is preserved from the FIRST insert |
 | P3 | `put` of different keys does not interfere | each key's row holds its own values |
 
 ### `touch`
 
 | # | Scenario | Expected |
 |---|----------|----------|
-| T1 | `touch` updates `lastUsedAt` only | `lastUsedAt` advances; `createdAt`, `cursorAgentId`, `skillId` are unchanged |
+| T1 | `touch` updates `lastUsedAt` only | `lastUsedAt` advances; `createdAt`, `cursorAgentId`, `workspaceId` are unchanged |
 | T2 | `touch` on a missing key | no-op; no row created, no throw |
 
 ### `delete`

@@ -59,7 +59,7 @@ endpoints:
     # `models.fetch: true` makes LibreChat query the adapter's
     # `/v1/models` so adding a workspace (drop a manifest + restart
     # the adapter container) doesn't require editing this file.
-    - name: "Cursor Workspaces"
+    - name: "Agentic Engineers"
       apiKey: "unused"
       baseURL: "http://adapter:8080/v1"
       headers:
@@ -68,12 +68,12 @@ endpoints:
         X-LibreChat-Parent-Message-Id: "{{LIBRECHAT_BODY_PARENTMESSAGEID}}"
       models:
         default:
-          - "cmu-genai-v1"
-          - "cmu-llm-systems-v1"
-          - "cursor-cookbook-v1"
+          - "engineer-genai-mentor-v1"
+          - "engineer-llm-systems-mentor-v1"
+          - "engineer-cursor-sdk-guide-v1"
         fetch: true
       titleConvo: true
-      titleModel: "cmu-genai-v1"
+      titleModel: "engineer-genai-mentor-v1"
       # gpt-5.5-extra-high-fast rejects sampling params — strip them
       # on the wire. Smoking-gun consume site:
       # ../LibreChat/packages/api/src/endpoints/openai/transform.ts:114-127

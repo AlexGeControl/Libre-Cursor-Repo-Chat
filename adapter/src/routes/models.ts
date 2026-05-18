@@ -1,20 +1,20 @@
 import type { FastifyPluginAsync } from "fastify";
-import type { Skill } from "../skills/manifest.ts";
+import type { Workspace } from "../workspaces/manifest.ts";
 
 interface Options {
-  skills: Skill[];
+  workspaces: Workspace[];
 }
 
 export const models: FastifyPluginAsync<Options> = async (app, opts) => {
   app.get("/v1/models", async () => ({
     object: "list",
-    data: opts.skills.map((s) => ({
-      id: s.id,
+    data: opts.workspaces.map((w) => ({
+      id: w.id,
       object: "model",
       created: 0,
       owned_by: "cursor-as-a-service",
-      display_name: s.display_name,
-      description: s.description,
+      display_name: w.display_name,
+      description: w.description,
     })),
   }));
 };

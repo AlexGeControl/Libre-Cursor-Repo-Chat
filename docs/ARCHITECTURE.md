@@ -28,9 +28,10 @@ Cursor API
 ```
 
 One LibreChat custom-endpoint entry = one adapter service. Today
-that's `Cursor Workspaces` → `http://adapter:8080/v1`. The adapter
-itself serves multiple workspaces ("skills") from a single process,
-each discovered from `workspaces/<id>/manifest.json`.
+that's `Agentic Engineers` → `http://adapter:8080/v1`. The adapter
+itself serves multiple workspaces from a single process, each
+discovered from `workspaces/<id>/manifest.json` and surfaced in the
+LibreChat dropdown as an individual agentic engineer.
 
 ## Services
 
@@ -49,13 +50,13 @@ service name (`adapter`, `mongodb`, etc.).
 ### `GET /health`
 
 ```json
-{ "ok": true, "skills": 5, "workspacesDir": "/app/workspaces",
+{ "ok": true, "workspaces": 5, "workspacesDir": "/app/workspaces",
   "stateDir": "/app/.run/adapter" }
 ```
 
 ### `GET /v1/models`
 
-OpenAI-shape list of skills, one per `workspaces/*/manifest.json`.
+OpenAI-shape list of workspaces, one per `workspaces/*/manifest.json`.
 LibreChat auto-fetches this when `models.fetch: true` in
 `librechat.yaml`, so adding a workspace doesn't require config edits
 on the LibreChat side.
@@ -67,7 +68,7 @@ SSE) and non-streaming. Dispatch flow on every request:
 
 1. Derive `convKey = ${body.user}:${X-LibreChat-Conversation-Id}`.
 2. Look up convKey → cursorAgentId in SQLite.
-3. If found and skill matches:
+3. If found and workspace matches:
    - `Agent.resume(agentId)` → `agent.send(lastUserMessage)`.
    - On `UnknownAgentError` (resume- OR send-time): delete mapping,
      fall through to create.
@@ -86,8 +87,8 @@ Each workspace lives at `workspaces/<id>/` with a `manifest.json`:
 ```json
 {
   "schema_version": 1,
-  "id": "cmu-genai-v1",
-  "display_name": "Cursor (CMU GenAI)",
+  "id": "engineer-genai-mentor-v1",
+  "display_name": "GenAI Fundamentals Mentor",
   "description": "...",
   "owner": "yaoge",
   "workspace_dir": "./repo",
@@ -97,7 +98,7 @@ Each workspace lives at `workspaces/<id>/` with a `manifest.json`:
 ```
 
 `workspace_dir` is relative to the manifest file. The agent's cwd
-when serving requests for this skill is the resolved path. The
+when serving requests for this workspace is the resolved path. The
 manifest's directory may also contain `.cursor/rules/`,
 `.cursor/skills/`, and `.cursor/mcp.json` — see "Workspace
 configuration" below.
@@ -272,10 +273,17 @@ docker compose up -d
 Three containers come up: `librechat-api` (UI on `:3080`),
 `librechat-mongo` (internal), `cursor-adapter` (`:8080`).
 
+> **One-time step after the Phase 3 Slice 1 rename lands:** run
+> `rm -f .run/adapter/conv-state.sqlite` once before the first
+> `docker compose up`. The Slice 1 rename swapped the SQLite column
+> `skill_id` → `workspace_id`; the new adapter will fail to insert
+> against any pre-existing schema. Only in-flight conversation
+> continuity is lost — no real internal users at the time of the cut.
+
 Open <http://localhost:3080>, register a local account on first run,
-then pick `Cursor Workspaces` from the model dropdown and choose any
-listed workspace (`cmu-genai-v1`, `cmu-llm-systems-v1`,
-`cursor-cookbook-v1`, …).
+then pick `Agentic Engineers` from the model dropdown and choose any
+listed agentic engineer (`engineer-genai-mentor-v1`,
+`engineer-llm-systems-mentor-v1`, `engineer-cursor-sdk-guide-v1`, …).
 
 ### Health checks
 
@@ -298,7 +306,7 @@ A one-shot chat round-trip against the adapter (no browser needed):
 ```bash
 curl -sS -X POST http://127.0.0.1:8080/v1/chat/completions \
   -H 'Content-Type: application/json' \
-  -d '{"model":"cmu-genai-v1","stream":false,
+  -d '{"model":"engineer-genai-mentor-v1","stream":false,
        "messages":[{"role":"user","content":"What is this repo about?"}]}'
 ```
 
@@ -331,17 +339,17 @@ Persistent state lives in `.run/`:
 
 ```bash
 # 1. add the repo (as a submodule or any other content)
-mkdir -p workspaces/my-skill-v1/repo
-# (populate workspaces/my-skill-v1/repo with content + optionally
-#  .cursor/rules/, .cursor/skills/, .cursor/mcp.json)
+mkdir -p workspaces/engineer-my-persona-v1/repo
+# (populate workspaces/engineer-my-persona-v1/repo with content +
+#  optionally .cursor/rules/, .cursor/skills/, .cursor/mcp.json)
 
 # 2. write the manifest
-cat > workspaces/my-skill-v1/manifest.json <<'JSON'
+cat > workspaces/engineer-my-persona-v1/manifest.json <<'JSON'
 {
   "schema_version": 1,
-  "id": "my-skill-v1",
-  "display_name": "Cursor (My Skill)",
-  "description": "...",
+  "id": "engineer-my-persona-v1",
+  "display_name": "My Persona",
+  "description": "Agentic engineer for …",
   "owner": "you",
   "workspace_dir": "./repo",
   "cursor_model": "gpt-5.5-extra-high-fast",
@@ -516,22 +524,22 @@ problem.
 │   │   ├── index.ts
 │   │   ├── routes/
 │   │   ├── cursor/          # SDK boundary + rehydration + MCP loader
-│   │   ├── skills/          # manifest registry
+│   │   ├── workspaces/      # manifest registry
 │   │   └── state/           # SQLite conv store + sweeper
-│   └── test/                # 94 tests (cursor + routes + state + skills + evals)
+│   └── test/                # 94 tests (cursor + routes + state + workspaces + evals)
 │       ├── README.md        # TDD conventions (.spec.md + 3-layer pyramid)
 │       ├── cursor/          # unit tests
 │       ├── routes/          # integration tests
 │       ├── state/           # mixed
-│       ├── skills/          # integration (real-fs fixtures)
+│       ├── workspaces/      # integration (real-fs fixtures)
 │       ├── evals/           # eval tests (live adapter)
 │       └── support/         # fakes, fixtures
 ├── workspaces/
-│   ├── cmu-genai-v1/             # CMU 10-X23 GenAI (submodule + manifest)
-│   ├── cmu-llm-systems-v1/       # CMU 11868 LLM Systems (submodule + manifest)
-│   ├── cursor-cookbook-v1/       # Cursor SDK cookbook (submodule + manifest)
-│   ├── context-mgmt-eval-v1/     # configured eval workspace (rules+skills+MCP)
-│   └── context-mgmt-eval-bare-v1/ # bare eval twin (no .cursor/)
+│   ├── engineer-genai-mentor-v1/      # CMU 10-X23 GenAI (submodule + manifest)
+│   ├── engineer-llm-systems-mentor-v1/ # CMU 11868 LLM Systems (submodule + manifest)
+│   ├── engineer-cursor-sdk-guide-v1/  # Cursor SDK cookbook (submodule + manifest)
+│   ├── eval-context-mgmt-configured-v1/ # configured eval workspace (rules+skills+MCP)
+│   └── eval-context-mgmt-bare-v1/     # bare eval twin (no .cursor/)
 └── .run/                    # gitignored runtime state
     ├── mongo-data/
     ├── librechat-{uploads,logs,images}/

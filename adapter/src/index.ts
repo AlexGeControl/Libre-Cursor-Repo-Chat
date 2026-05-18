@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 import Fastify from "fastify";
-import { loadSkills } from "./skills/registry.ts";
+import { loadWorkspaces } from "./workspaces/registry.ts";
 import { models } from "./routes/models.ts";
 import { chatCompletions } from "./routes/chat-completions.ts";
 import { ensureRipgrepOnPath } from "./cursor/runtime.ts";
@@ -46,18 +46,18 @@ const app = Fastify({
   bodyLimit: 5 * 1024 * 1024,
 });
 
-const skills = await loadSkills(WORKSPACES_DIR);
+const workspaces = await loadWorkspaces(WORKSPACES_DIR);
 app.log.info(
   {
     workspacesDir: WORKSPACES_DIR,
-    count: skills.length,
-    ids: skills.map((s) => s.id),
+    count: workspaces.length,
+    ids: workspaces.map((w) => w.id),
   },
-  "skills registry loaded",
+  "workspaces registry loaded",
 );
 
-if (skills.length === 0) {
-  app.log.warn("no skills found — adapter will reject every chat completion request");
+if (workspaces.length === 0) {
+  app.log.warn("no workspaces found — adapter will reject every chat completion request");
 }
 
 const convStore = new ConvStore(join(STATE_DIR, "conv-state.sqlite"));
@@ -83,13 +83,13 @@ app.log.info(
 
 app.get("/health", async () => ({
   ok: true,
-  skills: skills.length,
+  workspaces: workspaces.length,
   workspacesDir: WORKSPACES_DIR,
   stateDir: STATE_DIR,
 }));
 
-await app.register(models, { skills });
-await app.register(chatCompletions, { skills, convStore, cursorAdapter: sdkCursorAdapter });
+await app.register(models, { workspaces });
+await app.register(chatCompletions, { workspaces, convStore, cursorAdapter: sdkCursorAdapter });
 
 const shutdown = async (signal: string) => {
   app.log.info({ signal }, "shutting down");

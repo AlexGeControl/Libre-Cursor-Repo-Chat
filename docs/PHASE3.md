@@ -1,9 +1,9 @@
 # Phase 3 — Re-orientation: from "Cursor Skill Workspace" to "Agentic Engineer"
 
-> **Status:** scaffold, Slice 1 spec drafted, not yet started.
-> Handoff from [`PHASE2.md`](PHASE2.md). See [`PLAN.md`](PLAN.md)
-> for the macro picture and [`CONTEXT.md`](CONTEXT.md) for how this
-> doc evolves.
+> **Status:** Slice 1 (re-orientation) **done** 2026-05-18. Subsequent
+> slices not yet scoped. Handoff from [`PHASE2.md`](PHASE2.md). See
+> [`PLAN.md`](PLAN.md) for the macro picture and
+> [`CONTEXT.md`](CONTEXT.md) for how this doc evolves.
 
 ## Goal
 
@@ -23,7 +23,7 @@ Once it's landed, Phase 3 picks up the remaining items inherited
 from Phase 2 and Phase 1 (tier-2 evals, production-readiness,
 fork-only UI items) as subsequent slices.
 
-## Slice 1 — Workspace rename + Agentic Engineer rebrand (planned)
+## Slice 1 — Workspace rename + Agentic Engineer rebrand (done 2026-05-18)
 
 ### Intent
 
@@ -147,6 +147,96 @@ passes, with `npm test` green-bar checked after each pass.
   in inherited backlog; separate slice.
 - Any tier-2 evals or production-readiness work.
 
+### Findings log
+
+#### 2026-05-18 — Slice 1: workspace rename + Agentic Engineer rebrand
+
+Shipped the four-pass rename per the spec. Suite stayed at 94/94 green
+after every pass; typecheck clean throughout.
+
+**Pass 1 — code identifier rename (Skill → Workspace).**
+- `git mv adapter/src/skills → adapter/src/workspaces`,
+  `adapter/test/skills → adapter/test/workspaces`, plus
+  `package.json` glob update.
+- Type/identifier renames across nine production files and seven
+  test files: `Skill` → `Workspace`, `SkillManifest` →
+  `WorkspaceManifest`, `loadSkills` → `loadWorkspaces`, `skillId` →
+  `workspaceId`, `skills` (array variables) → `workspaces`,
+  `makeSkill` → `makeWorkspace`, log keys `fromSkill`/`toSkill` →
+  `fromWorkspace`/`toWorkspace`, eval-utils `DEFAULT_SKILL` →
+  `DEFAULT_WORKSPACE`, eval option `skill` → `workspace`. Six
+  `.spec.md` files updated to match.
+- The `/health` JSON response field `skills: N` flipped to
+  `workspaces: N` — internal/diagnostic, but worth flagging in
+  ARCHITECTURE.md.
+- `.cursor/skills/` (Cursor's own primitive, workspace-internal)
+  intentionally NOT renamed — that's Cursor's surface.
+
+**Pass 2 — SQLite column rename.**
+- DDL `skill_id` → `workspace_id`; prepared-statement aliases
+  updated. JS field name `skillId` was renamed in Pass 1, so the
+  alias `SELECT workspace_id AS workspaceId` is consistent. No
+  migration framework introduced — operator-level instruction added
+  to ARCHITECTURE.md "Daily startup" pointing at
+  `rm -f .run/adapter/conv-state.sqlite` as a one-time step before
+  the first `docker compose up` after this slice lands.
+
+**Pass 3 — workspace dir renames.**
+- Five `git mv`s under `workspaces/`:
+  `cmu-genai-v1` → `engineer-genai-mentor-v1`,
+  `cmu-llm-systems-v1` → `engineer-llm-systems-mentor-v1`,
+  `cursor-cookbook-v1` → `engineer-cursor-sdk-guide-v1`,
+  `context-mgmt-eval-v1` → `eval-context-mgmt-configured-v1`,
+  `context-mgmt-eval-bare-v1` → `eval-context-mgmt-bare-v1`.
+  `.gitmodules` paths auto-updated by `git mv` (the `[submodule ".."]`
+  section labels intentionally left at the old names — they're just
+  config-section keys, not paths, and rewriting them risks desyncing
+  `.git/config`).
+- Each manifest's `id` and `display_name` updated. Display names
+  read in the agentic-engineer register:
+  "GenAI Fundamentals Mentor", "LLM Systems Mentor",
+  "Cursor SDK Guide", "Context Mgmt Eval (configured)",
+  "Context Mgmt Eval (bare control)".
+- `librechat.yaml` `models.default` + `titleModel` updated.
+- Eval test file renamed
+  `test/evals/context-mgmt-eval-v1.test.ts` →
+  `test/evals/eval-context-mgmt.test.ts` and the workspace-id
+  references inside flipped. The marker-bearing `.cursor/` files
+  themselves were untouched — the `EVAL_MARKER:` lines that the test
+  reads at runtime have nothing to do with the workspace id.
+
+**Pass 4 — user-facing copy + new explainer.**
+- `librechat.yaml` endpoint `name` flipped to "Agentic Engineers".
+- `CLAUDE.md` mission paragraph rewritten with the agentic-engineer
+  framing; status banner refreshed.
+- `ARCHITECTURE.md` current-state prose updated (pipeline note,
+  GET /v1/models description, dispatch flow, workspace manifest
+  example, repo-layout tree, `/health` JSON shape).
+- `librechat.yaml.example`, `README.md`, `docs/LibreChat/mockup.html`
+  flipped to "Agentic Engineers" copy.
+- New [`docs/AGENTIC-ENGINEER.md`](AGENTIC-ENGINEER.md) one-pager
+  written for the next operator / management deck — explains the
+  product, maps it to Cursor primitives, and documents the role-id
+  naming convention (`engineer-<persona>-v<n>` vs
+  `eval-<topic>-v<n>`).
+
+**No surprises during execution.** Suite stayed green at every pass.
+The Edit/Write tools' "read-before-write" guard tripped a few times
+when writing to git-`mv`'d files (the Read tracker is keyed on the
+new path, which had never been Read), but the workaround — a quick
+Read of the renamed file before the Write — is just paperwork, not a
+real obstacle.
+
+**Carry-forward note for the next operator.** The persistent
+`.run/adapter/conv-state.sqlite` file from before the slice still has
+the old `skill_id` column. The first `docker compose up` after this
+slice lands MUST be preceded by `rm -f .run/adapter/conv-state.sqlite`
+— the new code creates the table with `workspace_id`, but
+`CREATE TABLE IF NOT EXISTS` is a no-op against the old schema, so an
+insert would fail with "table has no column named workspace_id". The
+ARCHITECTURE.md "Daily startup" note records this as a one-time
+operator step.
+
 ## Other Phase 3 candidates (after Slice 1)
 
 When Slice 1 lands, the next operator picks from the inherited
@@ -265,8 +355,8 @@ and Phase 2's slice structure are good templates.
 Phase 2's original scope listed this as half of the "Test rigor"
 cluster. The TDD backfill shipped (Slice 1); tier-2 evals did
 not. The
-[`context-mgmt-eval-v1`](../workspaces/context-mgmt-eval-v1/) /
-[`context-mgmt-eval-bare-v1`](../workspaces/context-mgmt-eval-bare-v1/)
+[`eval-context-mgmt-configured-v1`](../workspaces/eval-context-mgmt-configured-v1/) /
+[`eval-context-mgmt-bare-v1`](../workspaces/eval-context-mgmt-bare-v1/)
 pair already covers tier-1 (always-rule + skill + MCP, presence +
 absence). Tier-2 would add:
 
@@ -318,8 +408,8 @@ Two leak windows discovered during Phase 1, both still deferred:
    bare-vs-configured eval pair currently passes (the agent
    doesn't bother), but the topology allows it. A determined or
    differently-trained agent could grep
-   `context-mgmt-eval-v1/.cursor/` from
-   `context-mgmt-eval-bare-v1/`'s cwd.
+   `eval-context-mgmt-configured-v1/.cursor/` from
+   `eval-context-mgmt-bare-v1/`'s cwd.
 
 Production-grade fixes:
 

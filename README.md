@@ -1,20 +1,27 @@
 # Libre-Cursor-Repo-Chat
 
-Cursor-as-a-Service: expose Cursor workspaces (`.cursor/` config + a
-target repo) as multi-user chat skills inside LibreChat.
+Cursor-as-a-Service for NVIDIA HW infra: turn Cursor workspaces
+(`.cursor/` config + a target repo) into **agentic engineers** —
+teammate personas inside LibreChat that engineers can delegate rote
+farm work to. See [`docs/AGENTIC-ENGINEER.md`](docs/AGENTIC-ENGINEER.md)
+for the one-page explainer.
 
-**Status:** Phase 1 done (feature-complete workspace-as-a-service:
-rules, skills, MCP, with TDD coverage and bracketed evals). Phase 2
-not yet scoped — see [`docs/PHASE2.md`](docs/PHASE2.md) for the
-inherited backlog.
+**Status:** Phases 1 and 2 done; **Phase 3 Slice 1 (re-orientation
+from "Cursor Skill Workspace" to "Agentic Engineer")** landed
+2026-05-18 — code identifiers, workspace ids, and the user-facing
+endpoint label all read in the agentic-engineer register. 94
+deterministic adapter tests + 4/4 deterministic evals (2 MCP evals
+gated on optional `OREILLY_MCP_TOKEN`). Phase 3 continues — next slice
+TBD; see [`docs/PHASE3.md`](docs/PHASE3.md) for the inherited backlog.
 
 ## Where to read
 
 - [`CLAUDE.md`](CLAUDE.md) — original project kickoff & rules of the road
+- [`docs/AGENTIC-ENGINEER.md`](docs/AGENTIC-ENGINEER.md) — one-page product explainer
 - [`docs/PLAN.md`](docs/PLAN.md) — multi-phase plan (live)
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — how it runs today
-- [`docs/PHASE1.md`](docs/PHASE1.md) — Phase 1 narrative (frozen)
-- [`docs/PHASE2.md`](docs/PHASE2.md) — Phase 2 scaffold + handoff
+- [`docs/PHASE0.md`](docs/PHASE0.md), [`PHASE1.md`](docs/PHASE1.md), [`PHASE2.md`](docs/PHASE2.md) — frozen phase narratives
+- [`docs/PHASE3.md`](docs/PHASE3.md) — Phase 3 live doc (Slice 1 findings + inherited backlog)
 - [`docs/CONTEXT.md`](docs/CONTEXT.md) — doc lifecycle (read before
   editing PLAN.md / PHASE\*.md / ARCHITECTURE.md)
 - [`adapter/test/README.md`](adapter/test/README.md) — testing conventions
@@ -48,8 +55,9 @@ git submodule update --init --recursive    # fetches the three real workspace re
 docker compose up -d
 
 # 3. open http://localhost:3080, register an account, pick
-#    "Cursor Workspaces" from the endpoint dropdown, choose any
-#    skill (cmu-genai-v1, cmu-llm-systems-v1, cursor-cookbook-v1, …).
+#    "Agentic Engineers" from the endpoint dropdown, choose any
+#    agentic engineer (engineer-genai-mentor-v1,
+#    engineer-llm-systems-mentor-v1, engineer-cursor-sdk-guide-v1, …).
 ```
 
 That's it. Adding a new workspace later is a manifest + `docker compose
@@ -60,7 +68,7 @@ restart adapter`; see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#adding-a-wor
 ```bash
 cd adapter
 
-npm test            # unit + integration   (27 tests, ~1.2s, no network)
+npm test            # unit + integration   (94 tests, ~1.2s, no network)
 npm run test:evals  # live evals           (6 tests, ~80s, hits Cursor + optional MCP)
 npm run typecheck   # tsc --noEmit
 ```

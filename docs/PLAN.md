@@ -6,14 +6,16 @@
 
 ## Mission
 
-Let HW infra engineers deploy their **Cursor workspaces** (distilled
+Let HW infra engineers turn their **Cursor workspaces** (distilled
 test-gen / result-analysis know-how, encoded in `.cursor/` configs +
-target repos) as **multi-user chat services**, so per-engineer expertise
-scales across the org. One workspace = one "skill" in a LibreChat model
-dropdown, backed by a Cursor agent running with the original engineer's
-config and a mounted repo.
+target repos) into **agentic engineers** — teammate personas any
+authorized engineer can delegate rote farm work to. One workspace = one
+agentic engineer in the LibreChat model dropdown, backed by a Cursor
+agent running with the original engineer's config and a mounted repo.
+Delegate, not replace.
 
-The original design and constraints live in [`../CLAUDE.md`](../CLAUDE.md).
+One-page explainer: [`AGENTIC-ENGINEER.md`](AGENTIC-ENGINEER.md). The
+original design and constraints live in [`../CLAUDE.md`](../CLAUDE.md).
 
 ## Phases
 
@@ -42,13 +44,23 @@ and LibreChat was locked down to the MVP UI surface with NVIDIA
 branding overlaid via docker bind-mounts — zero LibreChat fork.
 Full story: [`PHASE2.md`](PHASE2.md).
 
-### Phase 3 — TBD (planned)
+### Phase 3 — in flight (Slice 1 done, 2026-05-18; next slice TBD)
 
-Phase 3 inherits tier-2 context-management evals (deferred from
-Phase 2's original scope) plus the production-readiness backlog
-that's been carrying since Phase 1 (workspace data isolation,
-per-user / per-skill API keys, self-hosted Cursor runtime, SSO).
-Plus a handful of cosmetic fork items from Phase 2 Slice 2 (Files
-panel, Export menu shell, NVIDIA dark-theme). Full list of
-candidates: [`PHASE3.md`](PHASE3.md). A real Phase 3 starts when
-one item — or a coherent cluster — has user-pull.
+Phase 3 opened with a product re-orientation slice rather than new
+capability work — the Phase-1 "skill / workspace" framing didn't read
+to NVIDIA HW engineers, who place teammate-shaped abstractions more
+easily than configurable-software ones. **Slice 1 — workspace rename +
+Agentic Engineer rebrand** shipped 2026-05-18: internal code entity
+unified to `Workspace`, five workspace ids renamed to engineer/eval
+shape, LibreChat endpoint label flipped to "Agentic Engineers", and a
+new [`AGENTIC-ENGINEER.md`](AGENTIC-ENGINEER.md) one-pager grounds the
+product positioning. 94/94 unit tests + 4/4 deterministic evals stayed
+green throughout.
+
+After Slice 1, the inherited backlog from Phase 2 carries forward:
+tier-2 context-management evals, production-readiness (workspace data
+isolation, per-user keys, self-hosted Cursor runtime, SSO), and the
+cosmetic fork items from Phase 2 Slice 2 (Files panel, Export menu
+shell, NVIDIA dark theme). Full list of candidates and the Slice 1
+findings: [`PHASE3.md`](PHASE3.md). Next slice picks up when an item —
+or a coherent cluster — has user-pull.

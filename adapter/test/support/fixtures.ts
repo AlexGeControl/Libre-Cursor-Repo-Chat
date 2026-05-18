@@ -1,11 +1,11 @@
-import type { Skill } from "../../src/skills/manifest.ts";
+import type { Workspace } from "../../src/workspaces/manifest.ts";
 
-export function makeSkill(overrides: Partial<Skill> = {}): Skill {
+export function makeWorkspace(overrides: Partial<Workspace> = {}): Workspace {
   return {
     schema_version: 1,
-    id: "test-skill-v1",
-    display_name: "Test Skill",
-    description: "Fixture skill for tests.",
+    id: "test-workspace-v1",
+    display_name: "Test Workspace",
+    description: "Fixture workspace for tests.",
     owner: "test",
     workspace_dir: "./repo",
     cursor_model: "gpt-5.5-extra-high-fast",
